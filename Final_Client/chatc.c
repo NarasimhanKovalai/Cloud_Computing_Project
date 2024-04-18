@@ -7,9 +7,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
-#include <algorithm>
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-using namespace std;
 #define NUM_OF_USERS 10 // total number of users that can be register
 #define MAX_USERS 50
 static unsigned int peers_count = 0;
@@ -36,7 +36,7 @@ void connect_server(struct sockaddr_in *server_conn, msg_ack_t *server_assigned_
 /*function that opens a the client for incoming connection(runs in a new thread)*/
 void *listenMode(void *args);
 /*generate menu for our p2p client*/
-int openChat(int fd); // opens new windows with xterm to chat.
+// int openChat(int fd); // opens new windows with xterm to chat.
 /*When user sends MSG_WHO this method will get all users from our server*/
 void getListFromServer(struct sockaddr_in *server_conn);
 /*Remove peer from server*/
@@ -44,7 +44,7 @@ void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *server_ass
 /*Handle Peer connection*/
 void *handlePeerConnection(void *tArgs);
 /*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
+void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE],int LampClock);
 
 void generate_menu()
 {
@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
 	/*the client connects to the server sends MSG_UP and gets MSG_ACK*/
 	connect_server(&server_conn, &server_assigned_port, &server_fd, &localIP, (char *)&usr_input);
 	printf("Congratulations, your port number as assigned by the server is:%d\n", server_assigned_port.m_port);
+	printf("Time received from server: %d",server_assigned_port.starter_time);
 	/*now the "Client" needs to start listen to incoming connections in a new thread*/
 	/***************************** The Algorithm ********************************************************
 	 **The algorithm is : we are listing for incoming connections at all time                          **
@@ -260,36 +261,36 @@ void connect_server(struct sockaddr_in *server_conn, msg_ack_t *server_assigned_
 }
 
 /*This function is used to fork and execute a chat program in a new terminal*/
-int openChat(int fd, char inviter[], char accepter[], int LampClock)
-{
-	char ascii_fd[1] = {fd + '0'};
-	pid_t child_pid;
-	/* Duplicate this process. */
-	child_pid = fork();
-	if (child_pid != 0)
-		/* This is the parent process. */
-		return child_pid;
-	else
-	{
-		/* Now execute CHAT */
-		/*Note! because we are using fork we have the fd of connected_client*/
-		/*The Program we are running : is doing  = While loop chat until MSG_END*/
-		// char *args[] = {"/usr/bin/xterm", "-e","./ChatBasedOnFD",ascii_fd, NULL };
-		char temp1[100] = "Inviter";
-		char temp2[100] = "Accepter";
-		char title[200];
-		strcpy(title, temp1);
-		strcat(title, inviter);
-		strcat(title, temp2);
-		strcat(title, accepter);
-		char *args[] = {"/usr/bin/xterm", "-xrm", "'XTerm.vt100.allowTitleOps: false'", "-T", title, "-e", "./ChatBasedOnFD", ascii_fd, NULL};
-		execv("/usr/bin/xterm", args);
-		/* The execl function returns only if an error occurs. */
-		// fprintf(stderr, "an error occurred in execlp\n");
-		// abort();
-	}
-	return 0;
-}
+// int openChat(int fd, char inviter[], char accepter[], int LampClock)
+// {
+// 	char ascii_fd[1] = {fd + '0'};
+// 	pid_t child_pid;
+// 	/* Duplicate this process. */
+// 	child_pid = fork();
+// 	if (child_pid != 0)
+// 		/* This is the parent process. */
+// 		return child_pid;
+// 	else
+// 	{
+// 		/* Now execute CHAT */
+// 		/*Note! because we are using fork we have the fd of connected_client*/
+// 		/*The Program we are running : is doing  = While loop chat until MSG_END*/
+// 		// char *args[] = {"/usr/bin/xterm", "-e","./ChatBasedOnFD",ascii_fd, NULL };
+// 		char temp1[100] = "Inviter";
+// 		char temp2[100] = "Accepter";
+// 		char title[200];
+// 		strcpy(title, temp1);
+// 		strcat(title, inviter);
+// 		strcat(title, temp2);
+// 		strcat(title, accepter);
+// 		char *args[] = {"/usr/bin/xterm", "-xrm", "'XTerm.vt100.allowTitleOps: false'", "-T", title, "-e", "./ChatBasedOnFD", ascii_fd, NULL};
+// 		execv("/usr/bin/xterm", args);
+// 		/* The execl function returns only if an error occurs. */
+// 		// fprintf(stderr, "an error occurred in execlp\n");
+// 		// abort();
+// 	}
+// 	return 0;
+// }
 
 /*function that opens a the client for incoming connection(runs in a new thread)*/
 void *listenMode(void *args)
@@ -500,7 +501,7 @@ void *handlePeerConnection(void *tArgs)
 	{
 		puts("recv failed");
 	}
-	LampClock = 1 + max(LampClock, atoi(lamportclockstring));
+	LampClock = 1 + MAX(LampClock, atoi(lamportclockstring));
 	printf("Updated Lamport Clock of listener/receiver is %d\n", LampClock);
 	pthread_detach(pthread_self());
 	return 0;
