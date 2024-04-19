@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
+#include <fcntl.h>
+
+int cont=0;
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -22,7 +25,7 @@ static void handler(int signum)
 	pthread_exit(NULL);
 }
 /*local logical lamport clock*/
-int LampClock = 0;
+int LampClock;
 /*eraseList function*/
 void erase_all_users();
 /* Add user to userList */
@@ -44,7 +47,7 @@ void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *server_ass
 /*Handle Peer connection*/
 void *handlePeerConnection(void *tArgs);
 /*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE],int LampClock);
+void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
 
 void generate_menu()
 {
@@ -55,6 +58,7 @@ void generate_menu()
 
 int main(int argc, char *argv[])
 {
+	LampClock = 0;
 	/*program Vars*/
 	int server_fd = 0;
 	msg_ack_t server_assigned_port;
@@ -71,7 +75,7 @@ int main(int argc, char *argv[])
 	/*the client connects to the server sends MSG_UP and gets MSG_ACK*/
 	connect_server(&server_conn, &server_assigned_port, &server_fd, &localIP, (char *)&usr_input);
 	printf("Congratulations, your port number as assigned by the server is:%d\n", server_assigned_port.m_port);
-	printf("Time received from server: %d",server_assigned_port.starter_time);
+	printf("Time received from server: %d", server_assigned_port.starter_time);
 	/*now the "Client" needs to start listen to incoming connections in a new thread*/
 	/***************************** The Algorithm ********************************************************
 	 **The algorithm is : we are listing for incoming connections at all time                          **
@@ -86,37 +90,142 @@ int main(int argc, char *argv[])
 	if (pthread_create(&listen_tid, NULL, listenMode, (void *)&server_assigned_port) != 0)
 		perror("could not create thread");
 	/*while true ->>> present menu and if connection initiate new terminal windows*/
-	int i = 0;
-	userSelection = (char)getchar();
-	if (userSelection == '0')
+	// int i = 0;
+	// userSelection = (char)getchar();
+	// if (userSelection == '0')
+	// {
+	// 	do
+	// 	{
+	// 		// generate_menu();
+	// 		sleep(server_assigned_port.starter_time);
+	// 		// if (userSelection == '9')
+	// 		// {
+	// 		// 	removePeerFromServer(&server_conn, &server_assigned_port);
+	// 		// }
+
+	// 		getListFromServer(&server_conn);
+
+	// 		int random_number = rand() % 5;
+	// 		switch (random_number)
+	// 		{
+	// 		case 0:
+
+	// 			// perform internal event
+	// 			LampClock++;
+
+	// 			int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
+	// 			if (logFile == -1)
+	// 			{
+	// 				perror("Failed to open log file");
+	// 				exit(EXIT_FAILURE);
+	// 			}
+
+	// 			// Save the current file descriptor for stdout
+	// 			int stdoutBackup = dup(STDOUT_FILENO);
+	// 			if (stdoutBackup == -1)
+	// 			{
+	// 				perror("Failed to backup stdout");
+	// 				exit(EXIT_FAILURE);
+	// 			}
+
+	// 			// Redirect stdout to the log file
+	// 			if (dup2(logFile, STDOUT_FILENO) == -1)
+	// 			{
+	// 				perror("Failed to redirect stdout");
+	// 				exit(EXIT_FAILURE);
+	// 			}
+
+	// 			// Print statements here will be redirected to the log file
+
+	// 			printf("Internal Event : Updated lamport clock of %s is %d\n", usr_input, LampClock);
+
+	// 			// Restore stdout to its original file descriptor
+	// 			if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
+	// 			{
+	// 				perror("Failed to restore stdout");
+	// 				exit(EXIT_FAILURE);
+	// 			}
+
+	// 			// Close the log file
+	// 			close(logFile);
+
+	// 		case 1:
+	// 			// send event
+	// 			selectPeerToConnect(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input, LampClock);
+	// 		}
+	// 		sleep(1);
+	// 		i++;
+	// 	} while (i <= 5);
+	// }
+	do
 	{
-		do
-		{
-			// generate_menu();
-			sleep(server_assigned_port.starter_time);
-			// if (userSelection == '9')
-			// {
-			// 	removePeerFromServer(&server_conn, &server_assigned_port);
-			// }
-
+		// generate_menu();
+		// userSelection = (char)getchar();
+		sleep(1);
+		// if (userSelection == '9')
+		// {
+		// 	removePeerFromServer(&server_conn, &server_assigned_port);
+		// }
+		
 			getListFromServer(&server_conn);
-
-			int random_number = rand() % 5;
-			switch (random_number)
+			int choice;
+			printf("Enter choice of event:\n0 for Internal Event\n1 for Sending messge\n");
+			scanf("%d", &choice);
+			switch (choice)
 			{
 			case 0:
+
 				// perform internal event
 				LampClock++;
+
+				// int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
+				// if (logFile == -1)
+				// {
+				// 	perror("Failed to open log file");
+				// 	exit(EXIT_FAILURE);
+				// }
+
+				// Save the current file descriptor for stdout
+				// int stdoutBackup = dup(STDOUT_FILENO);
+				// if (stdoutBackup == -1)
+				// {
+				// 	perror("Failed to backup stdout");
+				// 	exit(EXIT_FAILURE);
+				// }
+
+				// // Redirect stdout to the log file
+				// if (dup2(logFile, STDOUT_FILENO) == -1)
+				// {
+				// 	perror("Failed to redirect stdout");
+				// 	exit(EXIT_FAILURE);
+				// }
+
+				// Print statements here will be redirected to the log file
+
 				printf("Internal Event : Updated lamport clock of %s is %d\n", usr_input, LampClock);
+
+				// Restore stdout to its original file descriptor
+				// if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
+				// {
+				// 	perror("Failed to restore stdout");
+				// 	exit(EXIT_FAILURE);
+				// }
+
+				// // Close the log file
+				// close(logFile);
+				break;
 			case 1:
 				// send event
 				LampClock++;
-				selectPeerToConnect(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input, LampClock);
+				selectPeerToConnect(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input);
+				break;
 			}
-			sleep(1);
-			i++;
-		} while (i <= 100);
-	}
+		// printf(" Press 1 to Continue?");
+		// scanf("%d",&cont);
+		cont++;
+		sleep(1);
+	} while (cont<=10);
+
 	pthread_join(listen_tid, NULL);
 	//*The connection is closed by server in each communication!//
 
@@ -345,7 +454,7 @@ void *listenMode(void *args)
 		else
 
 		{
-			puts("Connection accepted sending MSG_ACK to client");
+			printf("Connection accepted sending MSG_ACK to client");
 		}
 
 		/*prompt the user if he want to accept call*/
@@ -497,21 +606,29 @@ void *handlePeerConnection(void *tArgs)
 	int *client_fd = (int *)tArgs;
 	char lamportclockstring[20];
 	// openChat(*client_fd,"","",0);
+	
+	// Print statements here will be redirected to the log file
 	if (recv(*client_fd, lamportclockstring, 20, 0) < 0)
 	{
 		puts("recv failed");
 	}
-	LampClock = 1 + MAX(LampClock, atoi(lamportclockstring));
+	int lamportclock_recv = atoi(lamportclockstring);
+	printf("Lamport clock received from sender is %d\n", lamportclock_recv);
+	LampClock = 1 + MAX(LampClock, lamportclock_recv);
 	printf("Updated Lamport Clock of listener/receiver is %d\n", LampClock);
+
+	// Restore stdout to its original file descriptor
+	
 	pthread_detach(pthread_self());
 	return 0;
 }
 
 /*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE], int LampClock)
+void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE])
 {
 	/*Function VARS*/
 	
+
 	int equlsPeerFD = -1; // used to open a new chat windows using FD Number
 	msg_peer_t peerSelection;
 	int userSelection = -1;
@@ -529,21 +646,45 @@ void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigne
 		}
 	}
 
-	/*Let us randomly choose to which peer he want's to connect*/
-	printf("Choosing a random client to send to : \n");
-	userSelection = rand() % 3;
+	// int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
+	// if (logFile == -1)
+	// {
+	// 	perror("Failed to open log file");
+	// 	exit(EXIT_FAILURE);
+	// }
 
-	while (strcmp(listOfPeers[userSelection]->m_name, usr_input) == 0)
-	{
-		userSelection = rand() % 3;
-	}
+	// // Save the current file descriptor for stdout
+	// int stdoutBackup = dup(STDOUT_FILENO);
+	// if (stdoutBackup == -1)
+	// {
+	// 	perror("Failed to backup stdout");
+	// 	exit(EXIT_FAILURE);
+	// }
+
+	// // Redirect stdout to the log file
+	// if (dup2(logFile, STDOUT_FILENO) == -1)
+	// {
+	// 	perror("Failed to redirect stdout");
+	// 	exit(EXIT_FAILURE);
+	// }
+
+	// // Print statements here will be redirected to the log file
+
+	// /*Let us randomly choose to which peer he want's to connect*/
+	printf("Choose peer number to send to \n");
+	// printf("Choosing a random client to send to : \n");
+	scanf("%d", &userSelection);
+
+	// while (strcmp(listOfPeers[userSelection]->m_name, usr_input) == 0)
+	// {
+	// 	userSelection = rand() % 3;
+	// }
 	// scanf("%d", &userSelection);
 	printf("Send Event : %s is sending to %s\n ", usr_input, listOfPeers[userSelection]->m_name);
 	printf("Updated Lamport Clock of Sender is %d\n", LampClock);
 
 	/*Testing Purps*/
 	// printf("%d",userSelection);
-
 	/*create msg_conn_t with all data required*/
 	msg_conn_t sendToPeer;
 	sendToPeer.m_type = MSG_CONN;
@@ -566,7 +707,7 @@ void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigne
 		/*open socket, connect to other peer, get FD, send msg_conn_t and wait for RESPONSE from other PEER */
 		out_sock->sin_family = AF_INET;
 		out_sock->sin_addr.s_addr = peerSelection.m_addr;
-		out_sock->sin_port = server_assigned_port->m_port;
+		out_sock->sin_port = peerSelection.m_port;
 		// open socket
 		if ((equlsPeerFD = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		{
@@ -588,4 +729,14 @@ void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigne
 		send(equlsPeerFD, lampclockstring, strlen(lampclockstring) + 1, 0);
 		// openChat(equlsPeerFD,usr_input,peerSelection.m_name,LampClock);
 	}
+
+	// // Restore stdout to its original file descriptor
+	// if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
+	// {
+	// 	perror("Failed to restore stdout");
+	// 	exit(EXIT_FAILURE);
+	// }
+
+	// // Close the log file
+	// close(logFile);
 }
