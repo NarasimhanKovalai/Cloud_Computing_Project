@@ -47,7 +47,11 @@ int main(int argc, char *argv[])  //***check all if for exit the program or not.
 	serv_sck.sin_family = AF_INET;		// IPv4 Structure
 	serv_sck.sin_addr.s_addr = INADDR_ANY;	// opened to any IP
 	serv_sck.sin_port = htons(C_SRV_PORT);	// port num defined in chat.h
-
+	int opt = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
 	// Bind socket
 	if (bind(socket_fd, (struct sockaddr *)&serv_sck, sizeof(serv_sck)) <
 	    0) {

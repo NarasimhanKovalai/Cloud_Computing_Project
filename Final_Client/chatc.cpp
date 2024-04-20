@@ -12,10 +12,12 @@
 #include <string>
 #include <algorithm>
 #include <iostream>
+#include <vector>
 using namespace std;
-int our_index=0;
+int reply_received_from_index = 0;
 int cont = 0;
 priority_queue<pair<int, int>> request_queue;
+vector<int> permission(3, 0);
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -119,14 +121,12 @@ int main(int argc, char *argv[])
 
 	/*create "another" main for incoming connections in thread*/
 
-
 	if (pthread_create(&listen_tid, NULL, listenMode, (void *)&server_assigned_port) != 0)
 		perror("could not create thread");
 
 	do
 	{
-		// generate_menu();
-		// userSelection = (char)getchar();
+
 		sleep(1);
 
 		int choice;
@@ -375,8 +375,21 @@ void *listenMode(void *args)
 
 	printf("Waiting for peer connection, Listening on Port:%d\n", addr.sin_port);
 	listen(sockfd, 1);
-	
-	
+	getListFromServer(&addr);
+	for (int i = 0; i < MAX_USERS; i++)
+	{
+		cout << "I am inside for loop lissten mode" << endl;
+		if (listOfPeers[i])
+		{
+			cout << "Checking port matching" << listOfPeers[i]->m_port << " " << actualArgs->m_port << endl;
+			if (listOfPeers[i]->m_port == actualArgs->m_port)
+			{
+
+				reply_received_from_index = i;
+				break;
+			}
+		}
+	}
 
 	while (1)
 	{
@@ -545,7 +558,7 @@ void *handlePeerConnection(void *tArgs)
 	char lamportclockstring[20];
 	int lamportclock_recv;
 	char msg_cat_string[5];
-	
+
 	// Receive the message
 	if (recv(*client_fd, message, 50, 0) < 0)
 	{
@@ -584,18 +597,42 @@ void *handlePeerConnection(void *tArgs)
 		// Replying to the request
 		char lampclockstring_reply[20]; // Allocate a buffer to hold the converted string
 		char pidstring_reply[20];		// Allocate a buffer to hold the converted string
+		char msg_cat_string_reply[5];
 		// Convert the integer to a string using sprintf
 		sprintf(lampclockstring_reply, "%d", LampClock);
-		sprintf(pidstring_reply, "%d", our_index);
+		sprintf(pidstring_reply, "%d", reply_received_from_index);
+		sprintf(msg_cat_string_reply, "%d", 1);
+
 		string message_reply = lampclockstring_reply;
 		message_reply += ",";
 		message_reply += pidstring;
-
-		send(*client_fd, message_reply.c_str(), message_reply.length() + 1, 0);
+		message_reply+=",";
+		message_reply+=msg_cat_string_reply;
+		cout << "Give reply index to broadcaster as " << reply_received_from_index << endl;
+		auto check=send(*client_fd, message_reply.c_str(), message_reply.length() + 1, 0);
+		cout<<"Client FD of connection between "<<reply_received_from_index<<"and "<<pidstring <<"is "<<client_fd<<endl;
+		if (check!=-1)
+			cout<<"Send successfully executed"<<endl;
 	}
 	else if (msg_cat_no == 1)
 	{
+		/*You need the replier's index*/
+		int flag = 0;
+		permission[reply_received_from_index] = 1;
+		for (auto x : permission)
+		{
+			if (x != 1)
+			{
+				cout << "Not yet receieved all permissions" << endl;
+				flag = 1;
+				break;
+			}
+		}
+		if (flag == 0)
+			cout << "Received all permissions\n"
+				 << endl;
 	}
+
 	pthread_detach(pthread_self());
 	return 0;
 }
@@ -729,7 +766,7 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in
 {
 	/*Function VARS*/
 
-	int sender_index = 0;
+	int broadcaster_index = 0;
 	int equlsPeerFD = -1; // used to open a new chat windows using FD Number
 	msg_peer_t peerSelection;
 	int userSelection = 0;
@@ -737,7 +774,6 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in
 	/*print all connected Peers*/
 	for (int i = 0; i < MAX_USERS; i++)
 	{
-		
 
 		/*Send MSG_PEER messeges*/
 		if (listOfPeers[i])
@@ -746,6 +782,17 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in
 			printf("\n[%d]\t-\t Username : %s\n", i, listOfPeers[i]->m_name);
 			printf("[%d]\t-\t IP : %s\n", i, inet_ntoa(*(struct in_addr *)&listOfPeers[i]->m_addr));
 			printf("[%d]\t-\t Port : %d\n\n", i, listOfPeers[i]->m_port);
+		}
+	}
+
+	for (int i = 0; i < MAX_USERS; i++)
+	{
+		if (listOfPeers[i])
+		{
+			if (strcmp(listOfPeers[i]->m_name, usr_input) == 0)
+			{
+				broadcaster_index = i;
+			}
 		}
 	}
 
@@ -758,14 +805,14 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in
 	char msg_cat_string[5];
 	// Convert the integer to a string using sprintf
 	sprintf(lampclockstring, "%d", LampClock);
-	sprintf(pidstring, "%d", sender_index);
+	sprintf(pidstring, "%d", broadcaster_index);
 	sprintf(msg_cat_string, "%d", 0);
 	string message = lampclockstring;
 	message += ",";
 	message += pidstring;
 	message += ",";
 	message += msg_cat_string;
-	messageQueue.push(Message(message, LampClock, sender_index, 0));
+	messageQueue.push(Message(message, LampClock, broadcaster_index, 0));
 	while (userSelection <= 2)
 	{
 		if (strcmp(listOfPeers[userSelection]->m_name, usr_input) != 0)
@@ -809,7 +856,7 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in
 				}
 
 				printf("Sending to  -%s-  Sending MSG_CONN and Waiting for Response...\n\n", peerSelection.m_name);
-
+				cout<<broadcaster_index<<"is sending to "<<userSelection<<"on fd "<<equlsPeerFD;
 				send(equlsPeerFD, message.c_str(), message.length() + 1, 0);
 			}
 		}
