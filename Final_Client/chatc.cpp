@@ -8,8 +8,15 @@
 #include <pthread.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <queue>
+#include <string>
+#include <algorithm>
+#include <iostream>
+using namespace std;
+int our_index=0;
+int cont = 0;
+priority_queue<pair<int, int>> request_queue;
 
-int cont=0;
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -24,6 +31,28 @@ static void handler(int signum)
 {
 	pthread_exit(NULL);
 }
+
+// Define a structure for the message including timestamp and process ID
+struct Message
+{
+	string content;
+	int timestamp;
+	int pid;
+	int msg_cat; /*Define 0 -Broadcast ,1 -Reply, 2- Release*/
+
+	Message(string content, int timestamp, int pid, int msg_cat) : content(content), timestamp(timestamp), pid(pid), msg_cat(msg_cat) {}
+
+	// Overloading the '<' operator for priority queue
+	bool operator<(const Message &msg) const
+	{
+		if (timestamp == msg.timestamp)
+			return pid > msg.pid; // If timestamps are equal, give priority to the smaller PID
+		return timestamp > msg.timestamp;
+	}
+};
+
+priority_queue<Message> messageQueue;
+
 /*local logical lamport clock*/
 int LampClock;
 /*eraseList function*/
@@ -48,6 +77,8 @@ void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *server_ass
 void *handlePeerConnection(void *tArgs);
 /*the peer choose which peer he wants to connect with*/
 void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
+/*Broadcast function to all peers*/
+void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
 
 void generate_menu()
 {
@@ -87,144 +118,46 @@ int main(int argc, char *argv[])
 	 ****************************************************************************************************/
 
 	/*create "another" main for incoming connections in thread*/
+
+
 	if (pthread_create(&listen_tid, NULL, listenMode, (void *)&server_assigned_port) != 0)
 		perror("could not create thread");
-	/*while true ->>> present menu and if connection initiate new terminal windows*/
-	// int i = 0;
-	// userSelection = (char)getchar();
-	// if (userSelection == '0')
-	// {
-	// 	do
-	// 	{
-	// 		// generate_menu();
-	// 		sleep(server_assigned_port.starter_time);
-	// 		// if (userSelection == '9')
-	// 		// {
-	// 		// 	removePeerFromServer(&server_conn, &server_assigned_port);
-	// 		// }
 
-	// 		getListFromServer(&server_conn);
-
-	// 		int random_number = rand() % 5;
-	// 		switch (random_number)
-	// 		{
-	// 		case 0:
-
-	// 			// perform internal event
-	// 			LampClock++;
-
-	// 			int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
-	// 			if (logFile == -1)
-	// 			{
-	// 				perror("Failed to open log file");
-	// 				exit(EXIT_FAILURE);
-	// 			}
-
-	// 			// Save the current file descriptor for stdout
-	// 			int stdoutBackup = dup(STDOUT_FILENO);
-	// 			if (stdoutBackup == -1)
-	// 			{
-	// 				perror("Failed to backup stdout");
-	// 				exit(EXIT_FAILURE);
-	// 			}
-
-	// 			// Redirect stdout to the log file
-	// 			if (dup2(logFile, STDOUT_FILENO) == -1)
-	// 			{
-	// 				perror("Failed to redirect stdout");
-	// 				exit(EXIT_FAILURE);
-	// 			}
-
-	// 			// Print statements here will be redirected to the log file
-
-	// 			printf("Internal Event : Updated lamport clock of %s is %d\n", usr_input, LampClock);
-
-	// 			// Restore stdout to its original file descriptor
-	// 			if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
-	// 			{
-	// 				perror("Failed to restore stdout");
-	// 				exit(EXIT_FAILURE);
-	// 			}
-
-	// 			// Close the log file
-	// 			close(logFile);
-
-	// 		case 1:
-	// 			// send event
-	// 			selectPeerToConnect(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input, LampClock);
-	// 		}
-	// 		sleep(1);
-	// 		i++;
-	// 	} while (i <= 5);
-	// }
 	do
 	{
 		// generate_menu();
 		// userSelection = (char)getchar();
 		sleep(1);
-		// if (userSelection == '9')
-		// {
-		// 	removePeerFromServer(&server_conn, &server_assigned_port);
-		// }
-		
+
+		int choice;
+		printf("Enter choice of event:\n0 for Internal Event\n1 for requesting CS\n");
+		scanf("%d", &choice);
+		switch (choice)
+		{
+		case 0:
+
+			// perform internal event
+			LampClock++;
+
+			printf("Internal Event : Updated lamport clock of %s is %d\n", usr_input, LampClock);
+
+			break;
+		case 1:
+			// broadcast request
+			LampClock++;
+			int x = 2;
 			getListFromServer(&server_conn);
-			int choice;
-			printf("Enter choice of event:\n0 for Internal Event\n1 for Sending messge\n");
-			scanf("%d", &choice);
-			switch (choice)
-			{
-			case 0:
+			printf("Broadacasting\n");
 
-				// perform internal event
-				LampClock++;
+			Broadcast(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input);
 
-				// int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
-				// if (logFile == -1)
-				// {
-				// 	perror("Failed to open log file");
-				// 	exit(EXIT_FAILURE);
-				// }
-
-				// Save the current file descriptor for stdout
-				// int stdoutBackup = dup(STDOUT_FILENO);
-				// if (stdoutBackup == -1)
-				// {
-				// 	perror("Failed to backup stdout");
-				// 	exit(EXIT_FAILURE);
-				// }
-
-				// // Redirect stdout to the log file
-				// if (dup2(logFile, STDOUT_FILENO) == -1)
-				// {
-				// 	perror("Failed to redirect stdout");
-				// 	exit(EXIT_FAILURE);
-				// }
-
-				// Print statements here will be redirected to the log file
-
-				printf("Internal Event : Updated lamport clock of %s is %d\n", usr_input, LampClock);
-
-				// Restore stdout to its original file descriptor
-				// if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
-				// {
-				// 	perror("Failed to restore stdout");
-				// 	exit(EXIT_FAILURE);
-				// }
-
-				// // Close the log file
-				// close(logFile);
-				break;
-			case 1:
-				// send event
-				LampClock++;
-				selectPeerToConnect(&out_sck, &server_assigned_port, &localIP, (char *)&usr_input);
-				break;
-			}
+			break;
+		}
 		// printf(" Press 1 to Continue?");
 		// scanf("%d",&cont);
 		cont++;
 		sleep(1);
-	} while (cont<=10);
+	} while (cont <= 10);
 
 	pthread_join(listen_tid, NULL);
 	//*The connection is closed by server in each communication!//
@@ -418,6 +351,7 @@ void *listenMode(void *args)
 	struct sockaddr_in addr;
 	int sockfd, ret;
 	/*******************************/
+
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0)
 	{
@@ -441,6 +375,8 @@ void *listenMode(void *args)
 
 	printf("Waiting for peer connection, Listening on Port:%d\n", addr.sin_port);
 	listen(sockfd, 1);
+	
+	
 
 	while (1)
 	{
@@ -604,38 +540,205 @@ void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *server_ass
 void *handlePeerConnection(void *tArgs)
 {
 	int *client_fd = (int *)tArgs;
+	char message[50];	// Allocate a buffer to hold the received message
+	char pidstring[20]; // Allocate a buffer to hold the converted string
 	char lamportclockstring[20];
-	// openChat(*client_fd,"","",0);
+	int lamportclock_recv;
+	char msg_cat_string[5];
 	
-	// Print statements here will be redirected to the log file
-	if (recv(*client_fd, lamportclockstring, 20, 0) < 0)
+	// Receive the message
+	if (recv(*client_fd, message, 50, 0) < 0)
 	{
 		puts("recv failed");
 	}
-	int lamportclock_recv = atoi(lamportclockstring);
-	printf("Lamport clock received from sender is %d\n", lamportclock_recv);
-	LampClock = 1 + MAX(LampClock, lamportclock_recv);
-	printf("Updated Lamport Clock of listener/receiver is %d\n", LampClock);
 
-	// Restore stdout to its original file descriptor
-	
+	// Extract Lamport clock value and PID from the received message
+	sscanf(message, "%[^,],%s,%s", lamportclockstring, pidstring, msg_cat_string);
+	lamportclock_recv = atoi(lamportclockstring);
+	auto msg_cat_no = (atoi(msg_cat_string));
+
+	// Update the Lamport clock
+
+	// Push the received message with timestamp and PID into the queue
+	LampClock = 1 + max(LampClock, lamportclock_recv);
+
+	if (msg_cat_no == 0)
+	{
+		messageQueue.push(Message(message, lamportclock_recv, atoi(pidstring), msg_cat_no));
+
+		printf("Broadcast request received\n");
+		printf("Lamport clock received from sender is %d\n ", lamportclock_recv);
+		printf("Debug statement\n");
+		printf("Updated Lamport Clock of listener/receiver is %d\n", LampClock);
+		printf("Pid received is %d\n", atoi(pidstring));
+
+		priority_queue<Message> tempQueue = messageQueue; // Create a temporary queue to keep the original queue intact
+		std::cout << "\nMessages in the queue:\n";
+		while (!tempQueue.empty())
+		{
+			Message msg = tempQueue.top();
+			std::cout << "Content: " << msg.content << " Timestamp: " << msg.timestamp << " PID: " << msg.pid << std::endl;
+			tempQueue.pop();
+		}
+
+		// Replying to the request
+		char lampclockstring_reply[20]; // Allocate a buffer to hold the converted string
+		char pidstring_reply[20];		// Allocate a buffer to hold the converted string
+		// Convert the integer to a string using sprintf
+		sprintf(lampclockstring_reply, "%d", LampClock);
+		sprintf(pidstring_reply, "%d", our_index);
+		string message_reply = lampclockstring_reply;
+		message_reply += ",";
+		message_reply += pidstring;
+
+		send(*client_fd, message_reply.c_str(), message_reply.length() + 1, 0);
+	}
+	else if (msg_cat_no == 1)
+	{
+	}
 	pthread_detach(pthread_self());
 	return 0;
 }
 
 /*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE])
+// void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE])
+// {
+// 	/*Function VARS*/
+
+// 	int equlsPeerFD = -1; // used to open a new chat windows using FD Number
+// 	msg_peer_t peerSelection;
+// 	int userSelection = -1;
+// 	/****************/
+// 	/*print all connected Peers*/
+// 	for (int i = 0; i < MAX_USERS; i++)
+// 	{
+// 		/*Send MSG_PEER messeges*/
+// 		if (listOfPeers[i])
+// 		{
+// 			/*print connected users*/
+// 			printf("\n[%d]\t-\t Username : %s\n", i, listOfPeers[i]->m_name);
+// 			printf("[%d]\t-\t IP : %s\n", i, inet_ntoa(*(struct in_addr *)&listOfPeers[i]->m_addr));
+// 			printf("[%d]\t-\t Port : %d\n\n", i, listOfPeers[i]->m_port);
+// 		}
+// 	}
+
+// 	// int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
+// 	// if (logFile == -1)
+// 	// {
+// 	// 	perror("Failed to open log file");
+// 	// 	exit(EXIT_FAILURE);
+// 	// }
+
+// 	// // Save the current file descriptor for stdout
+// 	// int stdoutBackup = dup(STDOUT_FILENO);
+// 	// if (stdoutBackup == -1)
+// 	// {
+// 	// 	perror("Failed to backup stdout");
+// 	// 	exit(EXIT_FAILURE);
+// 	// }
+
+// 	// // Redirect stdout to the log file
+// 	// if (dup2(logFile, STDOUT_FILENO) == -1)
+// 	// {
+// 	// 	perror("Failed to redirect stdout");
+// 	// 	exit(EXIT_FAILURE);
+// 	// }
+
+// 	// // Print statements here will be redirected to the log file
+
+// 	// /*Let us randomly choose to which peer he want's to connect*/
+// 	printf("Choose peer number to send to \n");
+// 	// printf("Choosing a random client to send to : \n");
+// 	scanf("%d", &userSelection);
+
+// 	// while (strcmp(listOfPeers[userSelection]->m_name, usr_input) == 0)
+// 	// {
+// 	// 	userSelection = rand() % 3;
+// 	// }
+// 	// scanf("%d", &userSelection);
+// 	printf("Send Event : %s is sending to %s\n ", usr_input, listOfPeers[userSelection]->m_name);
+// 	printf("Updated Lamport Clock of Sender is %d\n", LampClock);
+
+// 	/*Testing Purps*/
+// 	// printf("%d",userSelection);
+// 	/*create msg_conn_t with all data required*/
+// 	msg_conn_t sendToPeer;
+// 	sendToPeer.m_type = MSG_CONN;
+// 	strcpy(sendToPeer.m_name, usr_input);
+// 	sendToPeer.m_addr = *localIP;
+
+// 	/*Fetch Peer data by user choice*/
+
+// 	/*******************************/
+// 	if (listOfPeers[userSelection] != 0)
+// 	{
+// 		peerSelection.m_addr = listOfPeers[userSelection]->m_addr;
+// 		peerSelection.m_port = listOfPeers[userSelection]->m_port;
+// 		peerSelection.m_type = listOfPeers[userSelection]->m_type;
+// 		strcpy(peerSelection.m_name, listOfPeers[userSelection]->m_name);
+
+// 		printf("\nYou choose: %s\n", peerSelection.m_name);
+// 		printf("The IP:port of Requested peers is : %s:%d\n", inet_ntoa(*(struct in_addr *)&peerSelection.m_addr), peerSelection.m_port);
+
+// 		/*open socket, connect to other peer, get FD, send msg_conn_t and wait for RESPONSE from other PEER */
+// 		out_sock->sin_family = AF_INET;
+// 		out_sock->sin_addr.s_addr = peerSelection.m_addr;
+// 		out_sock->sin_port = peerSelection.m_port;
+// 		// open socket
+// 		if ((equlsPeerFD = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+// 		{
+// 			printf("\n Error : Could not create socket \n");
+// 			exit(1);
+// 		}
+
+// 		if (connect(equlsPeerFD, (struct sockaddr *)out_sock, sizeof(*out_sock)) < 0)
+// 		{
+// 			perror("connect");
+// 			exit(1);
+// 		}
+
+// 		printf("Sending to  -%s-  Sending MSG_CONN and Waiting for Response...\n\n", peerSelection.m_name);
+
+// 		char lampclockstring[20]; // Allocate a buffer to hold the converted string
+// 		char pidstring[20];		  // Allocate a buffer to hold the converted string
+// 		// Convert the integer to a string using sprintf
+// 		sprintf(lampclockstring, "%d", LampClock);
+// 		sprintf(pidstring, "%d", getpid());
+// 		string message = lampclockstring;
+// 		message += ",";
+// 		message += pidstring;
+
+// 		// Push the message with timestamp and PID into the queue
+// 		messageQueue.push(Message(message, LampClock, getpid()));
+// 		send(equlsPeerFD, message.c_str(), message.length() + 1, 0);
+// 		// openChat(equlsPeerFD,usr_input,peerSelection.m_name,LampClock);
+// 	}
+
+// 	// // Restore stdout to its original file descriptor
+// 	// if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
+// 	// {
+// 	// 	perror("Failed to restore stdout");
+// 	// 	exit(EXIT_FAILURE);
+// 	// }
+
+// 	// // Close the log file
+// 	// close(logFile);
+// }
+
+void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port, in_addr_t *localIP, char usr_input[C_BUFF_SIZE])
 {
 	/*Function VARS*/
-	
 
+	int sender_index = 0;
 	int equlsPeerFD = -1; // used to open a new chat windows using FD Number
 	msg_peer_t peerSelection;
-	int userSelection = -1;
+	int userSelection = 0;
 	/****************/
 	/*print all connected Peers*/
 	for (int i = 0; i < MAX_USERS; i++)
 	{
+		
+
 		/*Send MSG_PEER messeges*/
 		if (listOfPeers[i])
 		{
@@ -646,97 +749,80 @@ void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *server_assigne
 		}
 	}
 
-	// int logFile = open("log.txt", O_WRONLY | O_CREAT | O_APPEND, 0666);
-	// if (logFile == -1)
-	// {
-	// 	perror("Failed to open log file");
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	// // Save the current file descriptor for stdout
-	// int stdoutBackup = dup(STDOUT_FILENO);
-	// if (stdoutBackup == -1)
-	// {
-	// 	perror("Failed to backup stdout");
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	// // Redirect stdout to the log file
-	// if (dup2(logFile, STDOUT_FILENO) == -1)
-	// {
-	// 	perror("Failed to redirect stdout");
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	// // Print statements here will be redirected to the log file
-
 	// /*Let us randomly choose to which peer he want's to connect*/
-	printf("Choose peer number to send to \n");
-	// printf("Choosing a random client to send to : \n");
-	scanf("%d", &userSelection);
-
-	// while (strcmp(listOfPeers[userSelection]->m_name, usr_input) == 0)
-	// {
-	// 	userSelection = rand() % 3;
-	// }
+	// printf("Choose peer number to send to \n");
+	// // printf("Choosing a random client to send to : \n");
 	// scanf("%d", &userSelection);
-	printf("Send Event : %s is sending to %s\n ", usr_input, listOfPeers[userSelection]->m_name);
-	printf("Updated Lamport Clock of Sender is %d\n", LampClock);
-
-	/*Testing Purps*/
-	// printf("%d",userSelection);
-	/*create msg_conn_t with all data required*/
-	msg_conn_t sendToPeer;
-	sendToPeer.m_type = MSG_CONN;
-	strcpy(sendToPeer.m_name, usr_input);
-	sendToPeer.m_addr = *localIP;
-
-	/*Fetch Peer data by user choice*/
-
-	/*******************************/
-	if (listOfPeers[userSelection] != 0)
+	char lampclockstring[20]; // Allocate a buffer to hold the converted string
+	char pidstring[20];		  // Allocate a buffer to hold the converted string
+	char msg_cat_string[5];
+	// Convert the integer to a string using sprintf
+	sprintf(lampclockstring, "%d", LampClock);
+	sprintf(pidstring, "%d", sender_index);
+	sprintf(msg_cat_string, "%d", 0);
+	string message = lampclockstring;
+	message += ",";
+	message += pidstring;
+	message += ",";
+	message += msg_cat_string;
+	messageQueue.push(Message(message, LampClock, sender_index, 0));
+	while (userSelection <= 2)
 	{
-		peerSelection.m_addr = listOfPeers[userSelection]->m_addr;
-		peerSelection.m_port = listOfPeers[userSelection]->m_port;
-		peerSelection.m_type = listOfPeers[userSelection]->m_type;
-		strcpy(peerSelection.m_name, listOfPeers[userSelection]->m_name);
-
-		printf("\nYou choose: %s\n", peerSelection.m_name);
-		printf("The IP:port of Requested peers is : %s:%d\n", inet_ntoa(*(struct in_addr *)&peerSelection.m_addr), peerSelection.m_port);
-
-		/*open socket, connect to other peer, get FD, send msg_conn_t and wait for RESPONSE from other PEER */
-		out_sock->sin_family = AF_INET;
-		out_sock->sin_addr.s_addr = peerSelection.m_addr;
-		out_sock->sin_port = peerSelection.m_port;
-		// open socket
-		if ((equlsPeerFD = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		if (strcmp(listOfPeers[userSelection]->m_name, usr_input) != 0)
 		{
-			printf("\n Error : Could not create socket \n");
-			exit(1);
+
+			printf("Send Event : %s is sending to %s\n ", usr_input, listOfPeers[userSelection]->m_name);
+			printf("Updated Lamport Clock of Sender is %d\n", LampClock);
+			msg_conn_t sendToPeer;
+			sendToPeer.m_type = MSG_CONN;
+			strcpy(sendToPeer.m_name, usr_input);
+			sendToPeer.m_addr = *localIP;
+
+			/*Fetch Peer data by user choice*/
+
+			/*******************************/
+			if (listOfPeers[userSelection] != 0)
+			{
+				peerSelection.m_addr = listOfPeers[userSelection]->m_addr;
+				peerSelection.m_port = listOfPeers[userSelection]->m_port;
+				peerSelection.m_type = listOfPeers[userSelection]->m_type;
+				strcpy(peerSelection.m_name, listOfPeers[userSelection]->m_name);
+
+				printf("\nYou choose: %s\n", peerSelection.m_name);
+				printf("The IP:port of Requested peers is : %s:%d\n", inet_ntoa(*(struct in_addr *)&peerSelection.m_addr), peerSelection.m_port);
+
+				/*open socket, connect to other peer, get FD, send msg_conn_t and wait for RESPONSE from other PEER */
+				out_sock->sin_family = AF_INET;
+				out_sock->sin_addr.s_addr = peerSelection.m_addr;
+				out_sock->sin_port = peerSelection.m_port;
+				// open socket
+				if ((equlsPeerFD = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+				{
+					printf("\n Error : Could not create socket \n");
+					exit(1);
+				}
+
+				if (connect(equlsPeerFD, (struct sockaddr *)out_sock, sizeof(*out_sock)) < 0)
+				{
+					perror("connect");
+					exit(1);
+				}
+
+				printf("Sending to  -%s-  Sending MSG_CONN and Waiting for Response...\n\n", peerSelection.m_name);
+
+				send(equlsPeerFD, message.c_str(), message.length() + 1, 0);
+			}
 		}
 
-		if (connect(equlsPeerFD, (struct sockaddr *)out_sock, sizeof(*out_sock)) < 0)
-		{
-			perror("connect");
-			exit(1);
-		}
-
-		printf("Sending to  -%s-  Sending MSG_CONN and Waiting for Response...\n\n", peerSelection.m_name);
-		char lampclockstring[20]; // Allocate a buffer to hold the converted string
-
-		// Convert the integer to a string using sprintf
-		sprintf(lampclockstring, "%d", LampClock);
-		send(equlsPeerFD, lampclockstring, strlen(lampclockstring) + 1, 0);
-		// openChat(equlsPeerFD,usr_input,peerSelection.m_name,LampClock);
+		userSelection++;
 	}
 
-	// // Restore stdout to its original file descriptor
-	// if (dup2(stdoutBackup, STDOUT_FILENO) == -1)
-	// {
-	// 	perror("Failed to restore stdout");
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	// // Close the log file
-	// close(logFile);
+	priority_queue<Message> tempQueue = messageQueue; // Create a temporary queue to keep the original queue intact
+	std::cout << "\nMessages in sender's queue:\n";
+	while (!tempQueue.empty())
+	{
+		Message msg = tempQueue.top();
+		std::cout << "Content: " << msg.content << " Timestamp: " << msg.timestamp << " PID: " << msg.pid << std::endl;
+		tempQueue.pop();
+	}
 }
