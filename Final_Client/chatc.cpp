@@ -14,11 +14,18 @@
 #include <string>
 #include <vector>
 
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+
 #include "chat.h"
 using namespace std;
-int perm_count=0;
+int perm_count = 0;
 int reply_received_from_index = 0;
 int cont = 0;
+int requested_for_cs = 0;
+/*7 for broadcast request and 14 for broadcast release */
+
 priority_queue<pair<int, int>> request_queue;
 vector<int> permission(3, 0);
 
@@ -103,7 +110,7 @@ void selectPeerToConnect(struct sockaddr_in *out_sock,
 						 char usr_input[C_BUFF_SIZE]);
 /*Broadcast function to all peers*/
 void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port,
-			   in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
+			   in_addr_t *localIP, char usr_input[C_BUFF_SIZE], int broadcast_type);
 
 void generate_menu()
 {
@@ -116,6 +123,7 @@ void generate_menu()
 
 int main(int argc, char *argv[])
 {
+	cout << "Compilation succesfull!\n";
 	LampClock = 0;
 	/*program Vars*/
 	int server_fd = 0;
@@ -131,13 +139,30 @@ int main(int argc, char *argv[])
 	memset(&out_sck, 0, sizeof(struct sockaddr_in));
 	/*First*/
 	/*the client connects to the server sends MSG_UP and gets MSG_ACK*/
-	connect_server(&server_conn, &server_assigned_port, &server_fd,
-				   &localIP, (char *)&usr_input);
-	printf("Congratulations, your port number as assigned by the server "
-		   "is:%d\n",
-		   server_assigned_port.m_port);
-	printf("Time received from server: %d",
-		   server_assigned_port.starter_time);
+
+	/*I commented from here*/
+	// connect_server(&server_conn, &server_assigned_port, &server_fd,
+	// 			   &localIP, (char *)&usr_input);
+	// printf("Congratulations, your port number as assigned by the server "
+	// 	   "is:%d\n",
+	// 	   server_assigned_port.m_port);
+	// printf("Time received from server: %d",
+	// 	   server_assigned_port.starter_time);
+
+	/**I commented till here*/
+
+	cout << "Enter your name :\n";
+	string name;
+	cin >> name;
+	strcpy(usr_input, name.c_str());
+	cout << "enter your port number\n";
+	cout << "Note: this can be hardcoded to a particular port number and can be run across the machines\n";
+	cin >> server_assigned_port.m_port;
+	cout << "Congratulations, your port number as assigned by the server is: " << server_assigned_port.m_port;
+	cout << "\nenter the randome time you want to start\n";
+	cin >> server_assigned_port.starter_time;
+	cout << "Time received from server: " << server_assigned_port.starter_time << "\n";
+
 	/*now the "Client" needs to start listen to incoming connections in a
 	 * new thread*/
 	/***************************** The Algorithm
@@ -153,12 +178,9 @@ int main(int argc, char *argv[])
 	 ****************************************************************************************************/
 
 	/*create "another" main for incoming connections in thread*/
-
-	if (pthread_create(&listen_tid, NULL, listenMode,
-					   (void *)&server_assigned_port) != 0)
-	{
+	getListFromServer(&server_conn);
+	if (pthread_create(&listen_tid, NULL, listenMode, (void *)&server_assigned_port) != 0)
 		perror("could not create thread");
-	}
 
 	do
 	{
@@ -166,9 +188,11 @@ int main(int argc, char *argv[])
 		sleep(1);
 
 		int choice;
-		printf("Enter choice of event:\n0 for Internal Event\n1 for "
-			   "requesting CS\n");
-		scanf("%d", &choice);
+		printf("Enter choice of event:\n0 for Internal Event\n1 for requesting CS\n");
+		// scanf("%d", &choice);
+		cin >> choice;
+		fflush(NULL);
+
 		switch (choice)
 		{
 		case 0:
@@ -183,14 +207,18 @@ int main(int argc, char *argv[])
 			break;
 		case 1:
 			// broadcast request
+			permission = {0};
 			LampClock++;
 			int x = 2;
-			getListFromServer(&server_conn);
-			printf("Broadacasting\n");
+			printf("Broadacasting request\n");
 
 			Broadcast(&out_sck, &server_assigned_port,
-					  &localIP, (char *)&usr_input);
-
+					  &localIP, (char *)&usr_input, 7);
+			LampClock++;
+			printf("Broadcasting release\n");
+			if (requested_for_cs == 0)
+				Broadcast(&out_sck, &server_assigned_port,
+						  &localIP, (char *)&usr_input, 14);
 			break;
 		}
 		// printf(" Press 1 to Continue?");
@@ -430,7 +458,7 @@ void *listenMode(void *args)
 	printf("Waiting for peer connection, Listening on Port:%d\n",
 		   addr.sin_port);
 	listen(sockfd, 2);
-	getListFromServer(&addr);
+	// getListFromServer(&addr);
 	for (int i = 0; i < MAX_USERS; i++)
 	{
 		cout << "I am inside for loop lissten mode" << endl;
@@ -492,140 +520,249 @@ void *listenMode(void *args)
 	}
 	return 0;
 }
-
 /*When user sends MSG_WHO this method will get all users from our server*/
 void getListFromServer(struct sockaddr_in *server_conn)
 {
 	/*create a new sockaddr for a new connection*/
-	struct sockaddr_in serv_who_peer;
-	memset(&serv_who_peer, 0, sizeof(serv_who_peer));
-	serv_who_peer.sin_family = AF_INET; // IPv4 Structure
-	/*reusing struct sockaddr_in in main*/
-	serv_who_peer.sin_addr = server_conn->sin_addr;
-	serv_who_peer.sin_port =
-		htons(C_SRV_PORT); // port num defined in chat.h
+	// struct sockaddr_in serv_who_peer;
+	// memset(&serv_who_peer, 0, sizeof(serv_who_peer));
+	// serv_who_peer.sin_family = AF_INET; // IPv4 Structure
+	// /*reusing struct sockaddr_in in main*/
+	// serv_who_peer.sin_addr = server_conn->sin_addr;
+	// serv_who_peer.sin_port = htons(C_SRV_PORT); // port num defined in chat.h
 
-	int server_fd = 3; // that number will be erased by socket
-	// open socket
+	// int server_fd = 3; // that number will be erased by socket
+	// // open socket
 
-	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	{
-		printf("\n Error : Could not create socket \n");
-		exit(1);
-	}
+	// if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	// {
+	// 	cout << "\n Error : Could not create socket \n";
+	// 	exit(1);
+	// }
 
-	if (connect(server_fd, (struct sockaddr *)&serv_who_peer,
-				sizeof(*server_conn)) == -1)
-	{
-		perror("connect to server to get MSG_WHO refused");
-		exit(1);
-	}
+	// if (connect(server_fd, (struct sockaddr *)&serv_who_peer, sizeof(*server_conn)) == -1)
+	// {
+	// 	perror("connect to server to get MSG_WHO refused");
+	// 	exit(1);
+	// }
 
-	// send MSG_WHO to our server
-	msg_who_t sendToServer;
-	sendToServer.m_type = MSG_WHO;
+	// // send MSG_WHO to our server
+	// msg_who_t sendToServer;
+	// sendToServer.m_type = MSG_WHO;
 
-	// Send MSG_WHO
-	if (send(server_fd, (void *)&sendToServer, sizeof(sendToServer), 0) <
-		0)
-	{
-		puts("Sending MSG_WHO failed");
-		exit(1);
-	}
-	puts("MSG_WHO Sent to server\n");
+	// // Send MSG_WHO
+	// if (send(server_fd, (void *)&sendToServer, sizeof(sendToServer), 0) < 0)
+	// {
+	// 	cout << "Sending MSG_WHO failed";
+	// 	exit(1);
+	// }
+	// cout << "MSG_WHO Sent to server\n";
 
-	sleep(1);
+	// sleep(1);
 
-	// get MSG_HDR message from server and start getting the list of
-	// connected users
-	msg_hdr_t HdrMsgFromServer;
-	if (recv(server_fd, &HdrMsgFromServer, sizeof(msg_hdr_t), 0) == -1)
-	{
-		perror("read Messege \"MSG_HDR\" fail");
-		exit(1);
-	}
-	puts("Success : got MSG_HDR message");
-	sleep(1);
-	/*in loop of number of connected users fill our array(peer_msg array)
-	 * with data*/
+	// // get MSG_HDR message from server and start getting the list of connected users
+	// msg_hdr_t HdrMsgFromServer;
+	// if (recv(server_fd, &HdrMsgFromServer, sizeof(msg_hdr_t), 0) == -1)
+	// {
+	// 	perror("read Messege \"MSG_HDR\" fail");
+	// 	exit(1);
+	// }
+	// cout << "Success : got MSG_HDR message";
+	// sleep(1);
+	// /*in loop of number of connected users fill our array(peer_msg array) with data*/
 
-	printf("Got %d peers from Server:...\n", HdrMsgFromServer.m_count);
+	// cout << "Got " << HdrMsgFromServer.m_count<< " peers from Server:...\n";
 
 	// clear array from previous results
 	erase_all_users();
 
-	for (int i = 0; i < HdrMsgFromServer.m_count; i++)
-	{
-		msg_peer_t *PeerMsgFromServer =
-			(msg_peer_t *)malloc(sizeof(msg_peer_t));
-		if (!PeerMsgFromServer)
-		{
-			perror("malloc"); // check if malloc failed
-		}
-		if (recv(server_fd, PeerMsgFromServer, sizeof(msg_peer_t), 0) ==
-			-1)
-		{
-			// perror("recv read Messege \"MSG_PEER\" fail");
-			fprintf(stderr, "Error receiving message: %s\n",
-					strerror(errno));
-			exit(1);
-		}
+	// for (int i = 0; i < HdrMsgFromServer.m_count; i++)
+	// {
+	// 	msg_peer_t *PeerMsgFromServer = (msg_peer_t *)malloc(sizeof(msg_peer_t));
+	// 	if (!PeerMsgFromServer)
+	// 		perror("malloc"); // check if malloc failed
+	// 	if (recv(server_fd, PeerMsgFromServer, sizeof(msg_peer_t), 0) == -1)
+	// 	{
+	// 		// perror("recv read Messege \"MSG_PEER\" fail");
+	// 		fprintf(stderr, "Error receiving message: %s\n", strerror(errno));
+	// 		exit(1);
+	// 	}
 
-		// save with our array  external function
+	// 	// save with our array  external function
+	// 	user_add(PeerMsgFromServer);
+	// }
+
+	for (int i = 0; i < 3; i++)
+	{
+
+		// msg_type_t	m_type;				// = MSG_PEER
+		// in_addr_t   m_addr;				// Peer's IP address
+		// in_port_t   m_port;				// Peer's port number
+		// char        m_name[C_NAME_LEN + 1];		// Peer's display name
+		msg_peer_t *PeerMsgFromServer = (msg_peer_t *)malloc(sizeof(msg_peer_t));
+		cout << "enter one of the peers name :\n";
+		// fflush(stdout);
+		// cin.getline(PeerMsgFromServer->m_name, C_NAME_LEN + 1);
+		// getline(cin, PeerMsgFromServer->m_name);
+		// cin.ignore();
+		string temp;
+		cin >> temp;
+		strcpy(PeerMsgFromServer->m_name, temp.c_str());
+		// cin >> PeerMsgFromServer->m_name;
+		cout << "enter one of the peers port :\n";
+		cin >> PeerMsgFromServer->m_port;
+		// cin.get();
+		cout << "enter one of the peers IP Address :\n";
+
+		// string temp1;
+		// cin >> temp1;
+		// strcpy(PeerMsgFromServer->m_addr,temp1.c_str());
+		string temp1;
+		cin >> temp1;
+
+		PeerMsgFromServer->m_addr = inet_addr(temp1.c_str());
+		// cin.get();
+		PeerMsgFromServer->m_type = 31; // can be anything for now*******************************************************************
+		// cout << m_name << " : " << m_addr
 		user_add(PeerMsgFromServer);
 	}
 }
 
-/*Remove peer from server*/
-void removePeerFromServer(struct sockaddr_in *server_conn,
-						  msg_ack_t *server_assigned_port)
-{
-	/*create a new sockaddr for a new connection*/
-	struct sockaddr_in serv_who_peer;
-	memset(&serv_who_peer, 0, sizeof(serv_who_peer));
-	serv_who_peer.sin_family = AF_INET; // IPv4 Structure
-	/*reusing struct sockaddr_in in main*/
-	serv_who_peer.sin_addr = server_conn->sin_addr; // opened to any IP
-	serv_who_peer.sin_port =
-		htons(C_SRV_PORT); // port num defined in chat.h
+/*I have commented from here*/
+// /*When user sends MSG_WHO this method will get all users from our server*/
+// void getListFromServer(struct sockaddr_in *server_conn)
+// {
+// 	/*create a new sockaddr for a new connection*/
+// 	struct sockaddr_in serv_who_peer;
+// 	memset(&serv_who_peer, 0, sizeof(serv_who_peer));
+// 	serv_who_peer.sin_family = AF_INET; // IPv4 Structure
+// 	/*reusing struct sockaddr_in in main*/
+// 	serv_who_peer.sin_addr = server_conn->sin_addr;
+// 	serv_who_peer.sin_port =
+// 		htons(C_SRV_PORT); // port num defined in chat.h
 
-	int server_fd = 3; // that number will be erased by socket
-	// open socket
+// 	int server_fd = 3; // that number will be erased by socket
+// 	// open socket
 
-	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	{
-		printf("\n Error : Could not create socket \n");
-		exit(1);
-	}
+// 	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+// 	{
+// 		printf("\n Error : Could not create socket \n");
+// 		exit(1);
+// 	}
 
-	if (connect(server_fd, (struct sockaddr *)&serv_who_peer,
-				sizeof(*server_conn)) == -1)
-	{
-		perror("connect to server to send MSG_DOWN refused");
-		exit(1);
-	}
+// 	if (connect(server_fd, (struct sockaddr *)&serv_who_peer,
+// 				sizeof(*server_conn)) == -1)
+// 	{
+// 		perror("connect to server to get MSG_WHO refused");
+// 		exit(1);
+// 	}
 
-	// send MSG_DOWN to our server
-	msg_down_t sendToServer;
-	sendToServer.m_type = MSG_DOWN;
-	sendToServer.m_port = server_assigned_port->m_port;
-	sendToServer.m_addr = sockfd_to_in_addr_t(server_fd);
+// 	// send MSG_WHO to our server
+// 	msg_who_t sendToServer;
+// 	sendToServer.m_type = MSG_WHO;
 
-	// Send MSG_DOWN
-	if (send(server_fd, (void *)&sendToServer, sizeof(sendToServer), 0) <
-		0)
-	{
-		puts("Sending MSG_DOWN failed");
-		exit(1);
-	}
-	puts("MSG_DOWN Sent to server\n");
-	puts("Closing All Important Things..., Goodbye\n");
-	puts("It's OK to Close the Window Now OR enter ctrl+c\n");
-	pthread_exit(&listen_tid);
-	pthread_cancel(listen_tid);
-	pthread_kill(listen_tid, SIGKILL);
-	exit(1);
-}
+// 	// Send MSG_WHO
+// 	if (send(server_fd, (void *)&sendToServer, sizeof(sendToServer), 0) <
+// 		0)
+// 	{
+// 		puts("Sending MSG_WHO failed");
+// 		exit(1);
+// 	}
+// 	puts("MSG_WHO Sent to server\n");
+
+// 	sleep(1);
+
+// 	// get MSG_HDR message from server and start getting the list of
+// 	// connected users
+// 	msg_hdr_t HdrMsgFromServer;
+// 	if (recv(server_fd, &HdrMsgFromServer, sizeof(msg_hdr_t), 0) == -1)
+// 	{
+// 		perror("read Messege \"MSG_HDR\" fail");
+// 		exit(1);
+// 	}
+// 	puts("Success : got MSG_HDR message");
+// 	sleep(1);
+// 	/*in loop of number of connected users fill our array(peer_msg array)
+// 	 * with data*/
+
+// 	printf("Got %d peers from Server:...\n", HdrMsgFromServer.m_count);
+
+// 	// clear array from previous results
+// 	erase_all_users();
+
+// 	for (int i = 0; i < HdrMsgFromServer.m_count; i++)
+// 	{
+// 		msg_peer_t *PeerMsgFromServer =
+// 			(msg_peer_t *)malloc(sizeof(msg_peer_t));
+// 		if (!PeerMsgFromServer)
+// 		{
+// 			perror("malloc"); // check if malloc failed
+// 		}
+// 		if (recv(server_fd, PeerMsgFromServer, sizeof(msg_peer_t), 0) ==
+// 			-1)
+// 		{
+// 			// perror("recv read Messege \"MSG_PEER\" fail");
+// 			fprintf(stderr, "Error receiving message: %s\n",
+// 					strerror(errno));
+// 			exit(1);
+// 		}
+
+// 		// save with our array  external function
+// 		user_add(PeerMsgFromServer);
+// 	}
+// }
+
+// /*Remove peer from server*/
+// void removePeerFromServer(struct sockaddr_in *server_conn,
+// 						  msg_ack_t *server_assigned_port)
+// {
+// 	/*create a new sockaddr for a new connection*/
+// 	struct sockaddr_in serv_who_peer;
+// 	memset(&serv_who_peer, 0, sizeof(serv_who_peer));
+// 	serv_who_peer.sin_family = AF_INET; // IPv4 Structure
+// 	/*reusing struct sockaddr_in in main*/
+// 	serv_who_peer.sin_addr = server_conn->sin_addr; // opened to any IP
+// 	serv_who_peer.sin_port =
+// 		htons(C_SRV_PORT); // port num defined in chat.h
+
+// 	int server_fd = 3; // that number will be erased by socket
+// 	// open socket
+
+// 	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+// 	{
+// 		printf("\n Error : Could not create socket \n");
+// 		exit(1);
+// 	}
+
+// 	if (connect(server_fd, (struct sockaddr *)&serv_who_peer,
+// 				sizeof(*server_conn)) == -1)
+// 	{
+// 		perror("connect to server to send MSG_DOWN refused");
+// 		exit(1);
+// 	}
+
+// 	// send MSG_DOWN to our server
+// 	msg_down_t sendToServer;
+// 	sendToServer.m_type = MSG_DOWN;
+// 	sendToServer.m_port = server_assigned_port->m_port;
+// 	sendToServer.m_addr = sockfd_to_in_addr_t(server_fd);
+
+// 	// Send MSG_DOWN
+// 	if (send(server_fd, (void *)&sendToServer, sizeof(sendToServer), 0) <
+// 		0)
+// 	{
+// 		puts("Sending MSG_DOWN failed");
+// 		exit(1);
+// 	}
+// 	puts("MSG_DOWN Sent to server\n");
+// 	puts("Closing All Important Things..., Goodbye\n");
+// 	puts("It's OK to Close the Window Now OR enter ctrl+c\n");
+// 	pthread_exit(&listen_tid);
+// 	pthread_cancel(listen_tid);
+// 	pthread_kill(listen_tid, SIGKILL);
+// 	exit(1);
+// }
+/*I commented till here*/
 
 void *handlePeerConnection(void *tArgs)
 {
@@ -694,16 +831,16 @@ void *handlePeerConnection(void *tArgs)
 		sprintf(msg_cat_string_reply, "%d", 1);
 
 		string message_reply = lampclockstring_reply;
-		cout<<message_reply<<endl;
+		cout << message_reply << endl;
 		message_reply += ",";
-		cout<<"pid string is"<<pidstring_reply<<endl;
+		cout << "pid string is" << pidstring_reply << endl;
 		message_reply += pidstring_reply;
-		cout<<message_reply<<endl;
+		cout << message_reply << endl;
 		message_reply += ",";
 		message_reply += msg_cat_string_reply;
-		cout<<message_reply<<endl;
+		cout << message_reply << endl;
 		cout << "Give reply index to broadcaster as  "
-			 << reply_received_from_index<<endl;
+			 << reply_received_from_index << endl;
 		// cout<<"Hello";
 		// cout<<"The port of broadcaster is
 		// :"<<listOfPeers[atoi(pidstring)]->m_port; cout<<"World";
@@ -736,6 +873,43 @@ void *handlePeerConnection(void *tArgs)
 		if (check != -1)
 		{
 			cout << "Reply successfully executed" << endl;
+		}
+	}
+
+	else if (msg_cat_no == 2)
+	{
+		priority_queue<Message> temp;
+		while (!messageQueue.empty())
+		{
+			if (messageQueue.top().pid == atoi(pidstring))
+			{
+				messageQueue.pop(); // Pop the element
+				break;
+			}
+			else
+			{
+				temp.push(messageQueue.top());
+				messageQueue.pop();
+			}
+		}
+
+		// Transfer the messages back to the original queue
+		while (!temp.empty())
+		{
+			messageQueue.push(temp.top());
+			temp.pop();
+		}
+		priority_queue<Message> tempQueue =
+			messageQueue; // Create a temporary queue to keep the
+						  // original queue intact
+		std::cout << "\nMessages in the queue after release/popping:\n";
+		while (!tempQueue.empty())
+		{
+			Message msg = tempQueue.top();
+			std::cout << "Content: " << msg.content
+					  << " Timestamp: " << msg.timestamp
+					  << " PID: " << msg.pid << std::endl;
+			tempQueue.pop();
 		}
 	}
 
@@ -878,7 +1052,7 @@ void *handlePeerConnection(void *tArgs)
 // }
 
 void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port,
-			   in_addr_t *localIP, char usr_input[C_BUFF_SIZE])
+			   in_addr_t *localIP, char usr_input[C_BUFF_SIZE], int broadcast_type)
 {
 	/*Function VARS*/
 
@@ -928,13 +1102,22 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port,
 	// Convert the integer to a string using sprintf
 	sprintf(lampclockstring, "%d", LampClock);
 	sprintf(pidstring, "%d", broadcaster_index);
-	sprintf(msg_cat_string, "%d", 0);
+	if (broadcast_type == 7)
+		sprintf(msg_cat_string, "%d", 0);
+	else
+		sprintf(msg_cat_string, "%d", 2);
+
 	string message = lampclockstring;
 	message += ",";
 	message += pidstring;
 	message += ",";
 	message += msg_cat_string;
-	messageQueue.push(Message(message, LampClock, broadcaster_index, 0));
+	if (broadcast_type == 7)
+		messageQueue.push(Message(message, LampClock, broadcaster_index, 0));
+	else
+		/*In the broadcaster's side, his entry will always be on top of queue*/
+		messageQueue.pop();
+
 	while (userSelection <= 2)
 	{
 
@@ -1010,77 +1193,96 @@ void Broadcast(struct sockaddr_in *out_sock, msg_ack_t *server_assigned_port,
 					 message.length() + 1, 0);
 
 				// Receive reply
-				char reply[1024];
-				if (recv(equlsPeerFD, reply, 1024, 0) == -1)
+				if (broadcast_type == 7)
 				{
-					perror("Reply for brodcast request not "
-						   "received!");
-					exit(1);
-				}
-				puts("Success :Reply received\n");
-				cout << "Reply received is: " << reply << "\n";
+					char reply[1024];
+					if (recv(equlsPeerFD, reply, 1024, 0) == -1)
+					{
+						perror("Reply for brodcast request not "
+							   "received!");
+						exit(1);
+					}
+					puts("Success :Reply received\n");
+					cout << "Reply received is: " << reply << "\n";
 
-				char lamportclockstring[10];
-				char pidstring[10];
-				char msg_cat_string[10];
-				sscanf(reply, "%[^,],%[^,],%s", lamportclockstring,
-					   pidstring, msg_cat_string);
-				
-				int lamportclock_recv =
-					atoi(lamportclockstring);
-				auto msg_cat_no = (atoi(msg_cat_string));
-				LampClock =
-					1 + max(LampClock, lamportclock_recv);
-				int flag = 0;
-				
-				cout<<"Recevied permission from "<<pidstring<<endl;
-				perm_count++;
-				permission[atoi(pidstring)] = 1;
-				for(auto x:permission)
-					cout<<"Permission i is "<<x<<endl;
-				
-				// for (auto x : permission)
-				// {
+					char lamportclockstring[10];
+					char pidstring[10];
+					char msg_cat_string[10];
+					sscanf(reply, "%[^,],%[^,],%s", lamportclockstring,
+						   pidstring, msg_cat_string);
 
-				// 	if (x != 1)
-				// 	{
-				// 		cout << "Not yet receieved all "
-				// 				"permissions"
-				// 			 << endl;
-				// 		flag = 1;
-				// 		break;
-				// 	}
-				// }
-				// if (flag == 0)
-				// {
-				// 	cout << "Received all permissions\n"
-				// 		 << endl;
-				// }
-				if(perm_count!=2){
-					cout << "Not yet receieved all "
+					int lamportclock_recv =
+						atoi(lamportclockstring);
+					auto msg_cat_no = (atoi(msg_cat_string));
+					LampClock =
+						1 + max(LampClock, lamportclock_recv);
+					int flag = 0;
+
+					cout << "Recevied permission from " << pidstring << endl;
+					perm_count++;
+					permission[atoi(pidstring)] = 1;
+					for (auto x : permission)
+						cout << "Permission i is " << x << endl;
+					if (perm_count != 2)
+					{
+						cout << "Not yet receieved all "
 								"permissions"
 							 << endl;
-				}
-				else{
-					cout << "Received all permissions\n"
-						 << endl;
+					}
+					else
+					{
+						cout << "Received all permissions\n"
+							 << endl;
+
+						requested_for_cs = 1;
+						priority_queue<Message> tempQueue =
+							messageQueue; // Create a temporary queue to keep the original
+										  // queue intact
+						Message msg_top = tempQueue.top();
+						while (requested_for_cs == 1)
+						{
+							if (messageQueue.top().pid == broadcaster_index)
+							{
+								requested_for_cs = 0;
+								cout << "Peer " << broadcaster_index << "is allowed to access the critical section !" << endl;
+								sleep(5);
+
+								cout << "Peer " << broadcaster_index << " is about to broadcast a release" << endl;
+								/*Release Critical Section now by popping the broadcaster's entry from each queue*/
+								char lampclockstring[20]; // Allocate a buffer to hold the converted
+														  // string
+								char pidstring[20];		  // Allocate a buffer to hold the converted string
+								char msg_cat_string[5];
+								// Convert the integer to a string using sprintf
+								sprintf(lampclockstring, "%d", LampClock);
+								sprintf(pidstring, "%d", broadcaster_index);
+								sprintf(msg_cat_string, "%d", 0);
+								string message = lampclockstring;
+								message += ",";
+								message += pidstring;
+								message += ",";
+								message += msg_cat_string;
+							}
+							else
+							{
+								cout << "Peer " << broadcaster_index << "is denied access to the critical section due to queue rule !" << endl;
+							}
+						}
+						}
+					}
+					std::cout << "\nMessages in sender's queue:\n";
+					priority_queue<Message> tempQueue =
+						messageQueue;
+					while (!tempQueue.empty())
+					{
+						Message msg = tempQueue.top();
+						std::cout << "Content: " << msg.content
+								  << " Timestamp: " << msg.timestamp
+								  << " PID: " << msg.pid << std::endl;
+						tempQueue.pop();
+					}
 				}
 			}
+			userSelection++;
 		}
-
-		userSelection++;
 	}
-
-	priority_queue<Message> tempQueue =
-		messageQueue; // Create a temporary queue to keep the original
-					  // queue intact
-	std::cout << "\nMessages in sender's queue:\n";
-	while (!tempQueue.empty())
-	{
-		Message msg = tempQueue.top();
-		std::cout << "Content: " << msg.content
-				  << " Timestamp: " << msg.timestamp
-				  << " PID: " << msg.pid << std::endl;
-		tempQueue.pop();
-	}
-}
