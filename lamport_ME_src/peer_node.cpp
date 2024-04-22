@@ -18,8 +18,13 @@
 #include <vector>
 
 #include "peer.h"
-
+#include <mutex>
 using namespace std;
+
+//for thread synchronisation
+// int readCount = 0;
+mutex wrt;
+// mutex readLock;
 
 int perm_count = 0;
 int reply_received_from_index = 0;
@@ -35,8 +40,7 @@ vector<int> permission(3, 0);
 #define MAX_USERS 3
 
 static unsigned int peers_count = 0;
-static msg_peer_t *listOfPeers[MAX_USERS] = {
-	0};  // Array of Peers, initialised by null pointer
+static msg_peer_t *listOfPeers[MAX_USERS] = {0};  // Array of Peers, initialised by null pointer
 static pthread_t listen_tid;
 static char userSelection;
 
@@ -58,9 +62,7 @@ struct Message {
 		// Overloading the '<' operator for priority queue
 		bool operator<(const Message &msg) const {
 			if (timestamp == msg.timestamp) {
-				return pid > msg.pid;  // If timestamps are
-						       // equal, give priority
-						       // to the smaller PID
+				return pid > msg.pid;  // If timestamps are equal, give priority to the smaller PID
 			}
 			return timestamp > msg.timestamp;
 		}
@@ -74,7 +76,7 @@ typedef struct arg_handle {
 priority_queue<Message> messageQueue;
 
 /*local logical lamport clock*/
-int lamportClock;
+int lamportClock = 0;
 /*eraseList function*/
 void initialisePeerList();
 /* Add user to userList */
@@ -82,15 +84,10 @@ void addPeer(msg_peer_t *msg);
 /* Delete user from userList */
 /*get localIP Address using socket_fd*/
 in_addr_t sockfd_to_in_addr_t(int sockfd);
-/*function that opens a the client for incoming connection(runs in a new
- * thread)*/
+/*function that opens a the client for incoming connection(runs in a new thread)*/
 void *listenMode(void *args);
 /*generate menu for our p2p client*/
-// int openChat(int fd); // opens new windows with xterm to chat.
-/*When user sends MSG_WHO this method will get all users from our server*/
 void getPeerList();
-/*Remove peer from server*/
-void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *peerPort);
 /*Handle Peer connection*/
 void *handlePeerConnection(void *tArgs);
 
@@ -108,7 +105,7 @@ int main(int argc, char *argv[]) {
 	PORT = argc > 2 ? atoi(argv[2]) : 5000;
 	logMessage("%s running at port %d", executable_name, PORT);
 
-	lamportClock = 0;
+	// lamportClock = 0;
 	/*program Vars*/
 
 	msg_ack_t peerPort;
@@ -164,18 +161,11 @@ int main(int argc, char *argv[]) {
 			case 0:
 
 				// perform internal event
+				wrt.lock();
 				lamportClock++;
-
-				cout << "Internal Event : Updated lamport "
-					"clock of "
-				     << usr_input << " is " << lamportClock
-				     << endl;
-
-				logMessage(
-					"Internal Event : Updated lamport "
-					"clock "
-					"of %s is %d\n",
-					usr_input, lamportClock);
+				cout << "Internal Event : Updated lamport clock of " << usr_input << " is " << lamportClock << endl;
+				logMessage("Internal Event : Updated lamport clock of %s is %d\n", usr_input, lamportClock);
+				wrt.unlock();
 
 				break;
 			case 1:
@@ -183,19 +173,24 @@ int main(int argc, char *argv[]) {
 				// broadcast request
 				permission = {0}; /*Reset permission vector to 0
 						     for each iteration*/
+				wrt.lock();
 				lamportClock++; /*Increment Lamport Clock before
 						   broadcasting request*/
+				wrt.unlock();
 				cout << "Broadcasting request" << endl;
 
 				logMessage("Broadcasting request\n");
 
 				broadcast(&out_sck, &peerPort, &localIP,
 					  (char *)&usr_input, 7);
-				lamportClock++;
+				
+				// wrt.lock();
+				// lamportClock++;
+				// wrt.unlock();
+
 				cout << "Broadcasting release" << endl;
 
 				logMessage("Broadcasting release\n");
-
 				if (requested_for_cs == 0) {
 					broadcast(&out_sck, &peerPort, &localIP,
 						  (char *)&usr_input, 14);
@@ -212,7 +207,6 @@ int main(int argc, char *argv[]) {
 	} while (cont <= 10);
 
 	pthread_join(listen_tid, NULL);
-	//*The connection is closed by server in each communication!//
 
 	return 0;
 }
@@ -412,7 +406,10 @@ void *handlePeerConnection(void *tArgs) {
 	// Update the Lamport clock
 
 	// Push the received message with timestamp and PID into the queue
+	//put lock
+	wrt.lock();
 	lamportClock = 1 + max(lamportClock, lamportclock_recv);
+	//release lock
 
 	if (msg_cat_no == 0) {
 		messageQueue.push(Message(message, lamportclock_recv,
@@ -450,12 +447,15 @@ void *handlePeerConnection(void *tArgs) {
 		}
 
 		// Replying to the request
+		//put a lock
+		lamportClock++;
 		char lampclockstring_reply[20];	 // Allocate a buffer to hold
 						 // the converted string
 		char pidstring_reply[20];
 		char msg_cat_string_reply[5];
 		// Convert the integer to a string using sprintf
 		sprintf(lampclockstring_reply, "%d", lamportClock);
+		//release lock
 		sprintf(pidstring_reply, "%d", reply_received_from_index);
 		sprintf(msg_cat_string_reply, "%d", 1);
 
@@ -476,7 +476,7 @@ void *handlePeerConnection(void *tArgs) {
 
 		auto check = send(*client_fd, message_reply.c_str(),
 				  message_reply.length() + 1, 0);
-
+		//release lock
 		if (check != -1) {
 			cout << "Reply successfully executed" << endl;
 			logMessage("Reply succesfully executed\n");
@@ -517,6 +517,7 @@ void *handlePeerConnection(void *tArgs) {
 		}
 	}
 
+	wrt.unlock();
 	pthread_detach(pthread_self());
 	return 0;
 }
@@ -527,8 +528,7 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 	/*Function VARS*/
 
 	int broadcaster_index = 0;
-	int equlsPeerFD =
-		-1;  // used to open a new chat windows using FD Number
+	int equlsPeerFD = -1;
 	msg_peer_t peerSelection;
 	int userSelection = 0;
 	/****************/
@@ -571,7 +571,11 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 	char pidstring[20];
 	char msg_cat_string[5];
 	// Convert the integer to a string using sprintf
+	wrt.lock();
+	lamportClock++;
 	sprintf(lampclockstring, "%d", lamportClock);
+	cout << "Updated Lamport Clock of Sender is " << lamportClock << "\n";
+	logMessage("Updated Lamport Clock of Sender is %d\n",lamportClock);
 	sprintf(pidstring, "%d", broadcaster_index);
 	if (broadcast_type == 7) {
 		sprintf(msg_cat_string, "%d", 0);
@@ -592,6 +596,7 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 		 * queue*/
 		messageQueue.pop();
 	}
+	wrt.unlock();
 
 	while (userSelection <= 2) {
 
@@ -601,14 +606,13 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 			cout << "Send Event : " << usr_input
 			     << " is sending to "
 			     << listOfPeers[userSelection]->m_name << "\n";
-			cout << "Updated Lamport Clock of Sender is "
-			     << lamportClock << "\n";
+			
+			
 
 			logMessage("Send Event : %s is sending to %s\n ",
 				   usr_input,
 				   listOfPeers[userSelection]->m_name);
-			logMessage("Updated Lamport Clock of Sender is %d\n",
-				   lamportClock);
+		
 
 			msg_conn_t sendToPeer;
 			sendToPeer.m_type = MSG_CONN;
@@ -713,9 +717,9 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 						atoi(lamportclockstring);
 					auto msg_cat_no =
 						(atoi(msg_cat_string));
-					lamportClock =
-						1 + max(lamportClock,
-							lamportclock_recv);
+					wrt.lock();
+					lamportClock = 1 + max(lamportClock, lamportclock_recv);
+					wrt.unlock();
 					int flag = 0;
 
 					cout << "Recevied permission from "
@@ -933,7 +937,7 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 						}
 					}
 				}
-				std::cout << "\nMessages in sender's queue:\n";
+				cout << "\nMessages in sender's queue:\n";
 
 				logMessage("\nMessages in sender's queue:\n");
 
@@ -941,7 +945,7 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 					messageQueue;
 				while (!tempQueue.empty()) {
 					Message msg = tempQueue.top();
-					std::cout << "Content: " << msg.content
+					cout << "Content: " << msg.content
 						  << " Timestamp: "
 						  << msg.timestamp
 						  << " PID: " << msg.pid
@@ -965,11 +969,11 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 void logMessage(const char *format, ...) {
 	// Open the log file in append mode
 	string filename = string(executable_name) + ".txt";
-	std::ofstream logfile(filename, std::ios_base::app);
+	ofstream logfile(filename, std::ios_base::app);
 
 	// Get current timestamp
-	std::time_t current_time = std::time(nullptr);
-	std::string timestamp = std::asctime(std::localtime(&current_time));
+	time_t current_time = std::time(nullptr);
+	string timestamp = std::asctime(std::localtime(&current_time));
 	timestamp.pop_back();  // Remove the trailing newline
 
 	// Format the message using variadic arguments

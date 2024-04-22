@@ -1,0 +1,12 @@
+[Mon Apr 22 12:47:59 2024] adi running at port 10000
+[Mon Apr 22 12:47:59 2024] Socket created...
+
+[Mon Apr 22 12:47:59 2024] Binding done...
+
+[Mon Apr 22 12:47:59 2024] Waiting for peer connection, Listening on Port:10000
+
+[Mon Apr 22 12:48:00 2024] Enter choice of event:
+0 for Internal Event
+1 for requesting Critical Section
+2 for exiting the program
+
