@@ -90,10 +90,7 @@ void removePeerFromServer(struct sockaddr_in *server_conn,
 						  msg_ack_t *peerPort);
 /*Handle Peer connection*/
 void *handlePeerConnection(void *tArgs);
-/*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock,
-						 msg_ack_t *peerPort, in_addr_t *localIP,
-						 char usr_input[C_BUFF_SIZE]);
+
 /*broadcast function to all peers*/
 void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 			   in_addr_t *localIP, char usr_input[C_BUFF_SIZE], int broadcast_type);
