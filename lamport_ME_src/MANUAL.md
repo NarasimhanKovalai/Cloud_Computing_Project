@@ -16,3 +16,16 @@ The output is simultaneously displayed on the terminal as well as the log file `
 
 Different devices can be used as the nodes for the network by writing the appropriate IP addresses in the input files.
 
+
+# Screenshots of Simulation
+We simulated the Lamport's Mutual Exclusion for Distributed systems on 3 laptops connected to the same network.
+
+We simulated the below example for 3 devices. Note that P1 corresponds to Device adi, P2 to Device nar and P3 to Device yas. 
+0. Example test case
+![example](example.png)
+1. Device adi
+![Device adi](adi_screenshot.jpg)
+2. Device nar
+![Device nar](nar_screenshot.jpg)
+3. Device yas
+![Device yas](yas_screenshot.jpg)
