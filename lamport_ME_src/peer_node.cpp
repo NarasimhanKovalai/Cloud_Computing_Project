@@ -109,14 +109,11 @@ int main(int argc, char *argv[]) {
 	/*program Vars*/
 
 	msg_ack_t peerPort;
-	struct sockaddr_in server_conn, incoming_sck;
 	struct sockaddr_in out_sck;
 	in_addr_t localIP;	      // our peer IP Address
 	char usr_input[C_BUFF_SIZE];  // for user input during the program
 	/***************************************/
 	signal(SIGUSR1, handler);
-	memset(&server_conn, 0, sizeof(struct sockaddr_in));
-	memset(&incoming_sck, 0, sizeof(struct sockaddr_in));
 	memset(&out_sck, 0, sizeof(struct sockaddr_in));
 
 	strcpy(usr_input, executable_name);
