@@ -1,4 +1,8 @@
 # Cloud_Computing_Project
+1. Aditya Balakrishnan (20CS01019)
+2. Narasimhan Kovalai (20CS01075)
+3. Nalanaga Yasaswin (20CS01040)
+
 # Rules used to update the Lamport Clock for events.
 * a. newClock=oldClock+1
 * b. newClock=max(newClock,oldClock) + 1
