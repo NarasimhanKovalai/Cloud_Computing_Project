@@ -93,13 +93,7 @@ void getPeerList();
 void removePeerFromServer(struct sockaddr_in *server_conn, msg_ack_t *peerPort);
 /*Handle Peer connection*/
 void *handlePeerConnection(void *tArgs);
-<<<<<<< Updated upstream
 
-=======
-/*the peer choose which peer he wants to connect with*/
-void selectPeerToConnect(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
-			 in_addr_t *localIP, char usr_input[C_BUFF_SIZE]);
->>>>>>> Stashed changes
 /*broadcast function to all peers*/
 void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 	       in_addr_t *localIP, char usr_input[C_BUFF_SIZE],
@@ -109,9 +103,14 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 void logMessage(const char *format, ...);
 
 int main(int argc, char *argv[]) {
+
+	executable_name = argc > 1 ? argv[1] : "unknown";
+	PORT = argc > 2 ? atoi(argv[2]) : 5000;
+	logMessage("%s running at port %d", executable_name, PORT);
+
 	lamportClock = 0;
 	/*program Vars*/
-	int server_fd = 0;
+
 	msg_ack_t peerPort;
 	struct sockaddr_in server_conn, incoming_sck;
 	struct sockaddr_in out_sck;
@@ -123,16 +122,20 @@ int main(int argc, char *argv[]) {
 	memset(&incoming_sck, 0, sizeof(struct sockaddr_in));
 	memset(&out_sck, 0, sizeof(struct sockaddr_in));
 
-	cout << "Enter your name :\n";
-	string name;
-	cin >> name;
-	strcpy(usr_input, name.c_str());
-	cout << "Enter your port number\n";
-	cin >> peerPort.m_port;
+	strcpy(usr_input, executable_name);
+	peerPort.m_port = PORT;
+
 	cout << "Congratulations, your port number is: " << peerPort.m_port;
+
+	if (!inputFile.is_open()) {
+		std::cerr << "Error: Unable to open input file." << std::endl;
+		return 1;
+	}
 
 	getPeerList(); /*Get List of other peers in the network, apart from
 			  yourself*/
+
+	inputFile.close();
 
 	if (pthread_create(&listen_tid, NULL, listenMode, (void *)&peerPort) !=
 	    0) {
@@ -148,7 +151,13 @@ int main(int argc, char *argv[]) {
 		cout << "Enter choice of event:\n0 for Internal Event\n1 for "
 			"requesting Critical Section\n2 for exiting the program"
 		     << endl;
+
+		logMessage(
+			"Enter choice of event:\n0 for Internal Event\n1 for "
+			"requesting Critical Section\n2 for exiting the "
+			"program\n");
 		cin >> choice;
+		logMessage((to_string(choice) + "\n").c_str());
 		fflush(NULL);
 
 		switch (choice) {
@@ -162,6 +171,12 @@ int main(int argc, char *argv[]) {
 				     << usr_input << " is " << lamportClock
 				     << endl;
 
+				logMessage(
+					"Internal Event : Updated lamport "
+					"clock "
+					"of %s is %d\n",
+					usr_input, lamportClock);
+
 				break;
 			case 1:
 
@@ -172,10 +187,15 @@ int main(int argc, char *argv[]) {
 						   broadcasting request*/
 				cout << "Broadcasting request" << endl;
 
+				logMessage("Broadcasting request\n");
+
 				broadcast(&out_sck, &peerPort, &localIP,
 					  (char *)&usr_input, 7);
 				lamportClock++;
 				cout << "Broadcasting release" << endl;
+
+				logMessage("Broadcasting release\n");
+
 				if (requested_for_cs == 0) {
 					broadcast(&out_sck, &peerPort, &localIP,
 						  (char *)&usr_input, 14);
@@ -253,9 +273,12 @@ void *listenMode(void *args) {
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
 		cout << "Error creating socket!\n";
+		logMessage("Error creating socket!\n");
 		exit(1);
 	}
+
 	cout << "Socket created...\n";
+	logMessage("Socket created...\n");
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
@@ -265,12 +288,18 @@ void *listenMode(void *args) {
 	ret = bind(sockfd, (struct sockaddr *)&addr, sizeof(addr));
 	if (ret < 0) {
 		cout << "Error binding!\n";
+		logMessage("Error binding!\n");
+
 		exit(1);
 	}
 	cout << "Binding done...\n";
+	logMessage("Binding done...\n");
 
 	cout << "Waiting for peer connection, Listening on Port: <<"
 	     << addr.sin_port << "\n";
+	logMessage("Waiting for peer connection, Listening on Port:%d\n",
+		   addr.sin_port);
+
 	listen(sockfd, 2);
 	// getPeerList(&addr);
 	for (int i = 0; i < MAX_USERS; i++) {
@@ -292,12 +321,17 @@ void *listenMode(void *args) {
 			       NULL);  // busy-waiting for incoming connections
 
 		if (client_fd < 0) {
-			perror("try to accept incoming connection failed");
+			perror("Trying to accept incoming connection failed");
+			logMessage(
+				"Trying to accept incoming connection failed\n");
 		} else
 
 		{
 			cout << "Connection accepted sending MSG_ACK to "
 				"client\n";
+			logMessage(
+				"Connection accepted sending MSG_ACK to "
+				"client\n");
 		}
 
 		/*prompt the user if he want to accept call*/
@@ -307,16 +341,19 @@ void *listenMode(void *args) {
 		if (pthread_create(&t, NULL, handlePeerConnection,
 				   (void *)&arg_handle_peer) != 0) {
 			perror("could not create thread");
+			logMessage("Could not create thread\n");
 		}
 
 		pthread_join(t, NULL);
 		if (close(client_fd) == -1) {
 			perror("close fail");
+			logMessage("Closing connection failed\n");
 		}
 		sleep(1);
 	}
 	if (close(socket_fd) == -1) {
 		perror("close fail");
+		logMessage("Closing socket failed\n");
 		exit(1);
 	}
 	return 0;
@@ -331,16 +368,15 @@ void getPeerList() {
 	for (int i = 0; i < 3; i++) {
 
 		msg_peer_t *peer = (msg_peer_t *)malloc(sizeof(msg_peer_t));
-		cout << "enter one of the peers name :\n";
 		string temp;
-		cin >> temp;
+		std::getline(inputFile, temp);
 		strcpy(peer->m_name, temp.c_str());
-		cout << "enter one of the peers port :\n";
-		cin >> peer->m_port;
-		cout << "enter one of the peers IP Address :\n";
-		string temp1;
-		cin >> temp1;
-		peer->m_addr = inet_addr(temp1.c_str());
+		// cout << "Enter one of the peers port :\n";
+		std::getline(inputFile, temp);
+		peer->m_port = std::stoi(temp);
+		// cout << "enter one of the peers IP Address :\n";
+		std::getline(inputFile, temp);
+		peer->m_addr = inet_addr(temp.c_str());
 		peer->m_type = 31;
 		addPeer(peer);
 	}
@@ -360,6 +396,7 @@ void *handlePeerConnection(void *tArgs) {
 	// Receive the message
 	if (recv(*client_fd, message, 50, 0) < 0) {
 		puts("recv failed");
+		logMessage("recv failed\n");
 	}
 
 	// Extract Lamport clock value and PID from the received message
@@ -378,11 +415,16 @@ void *handlePeerConnection(void *tArgs) {
 		messageQueue.push(Message(message, lamportclock_recv,
 					  atoi(pidstring), msg_cat_no));
 
-		cout << "broadcast request received\n";
+		cout << "Broadcast request received\n";
+		logMessage("Broadcast request received\n");
 		cout << "Lamport clock received from sender is "
 		     << lamportclock_recv << "\n";
+		logMessage("Lamport clock received from sender is %d\n ",
+			   lamportclock_recv);
 		cout << "Updated Lamport Clock of listener/receiver is "
 		     << lamportClock << "\n";
+		logMessage("Updated Lamport Clock of listener/receiver is %d\n",
+			   LampClock);
 		cout << "Pid received is " << atoi(pidstring) << "\n";
 
 		priority_queue<Message> tempQueue =
