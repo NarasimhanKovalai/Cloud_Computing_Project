@@ -1,6 +1,6 @@
 # Rules used to update the Lamport Clock for events.
-a. newClock=oldClock+1
-b. newClock=max(newClock,oldClock) + 1
+* a. newClock=oldClock+1
+* b. newClock=max(newClock,oldClock) + 1
 ## Sender Side
 1. Whenever a process requests a critical section, it sends a broadcast request to other 2 processes. The Lamport Clock is updated before sending the broadcast request (rule a).
 
@@ -13,6 +13,7 @@ b. newClock=max(newClock,oldClock) + 1
 
 2. Whenever process receives a critical section release message, it updates its Lamport Clock according to rule b.
 
+3. Each time the broadcaster receives a permission from a peer, it updated its Lamport Clock according to rule b.
 # Framework Used
 
 ## Assumptions
