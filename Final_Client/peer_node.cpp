@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "chat.h"
+#include "peer.h"
 
 using namespace std;
 
@@ -203,6 +203,8 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case 2:
+				cout<<executable_name<<" has exited the network\n";
+				logMessage("%s has exited the network\n",executable_name);
 				exit(1);
 		}
 		cont++;
@@ -323,7 +325,8 @@ void *listenMode(void *args) {
 		if (client_fd < 0) {
 			perror("Trying to accept incoming connection failed");
 			logMessage(
-				"Trying to accept incoming connection failed\n");
+				"Trying to accept incoming connection "
+				"failed\n");
 		} else
 
 		{
@@ -424,9 +427,11 @@ void *handlePeerConnection(void *tArgs) {
 		cout << "Updated Lamport Clock of listener/receiver is "
 		     << lamportClock << "\n";
 		logMessage("Updated Lamport Clock of listener/receiver is %d\n",
-			   LampClock);
-		cout << "Pid received is " << atoi(pidstring) << "\n";
-
+			   lamportClock);
+		cout << "Request received from peer node with id "
+		     << atoi(pidstring) << "\n";
+		logMessage("Request received from peer node with id %d\n",
+			   atoi(pidstring));
 		priority_queue<Message> tempQueue =
 			messageQueue;  // Create a temporary queue to keep the
 				       // original queue intact
@@ -436,6 +441,11 @@ void *handlePeerConnection(void *tArgs) {
 			cout << "Content: " << msg.content
 			     << " Timestamp: " << msg.timestamp
 			     << " PID: " << msg.pid << std::endl;
+			string queue_output =
+				"Content: " + msg.content +
+				" Timestamp: " + to_string(msg.timestamp) +
+				" PID: " + to_string(msg.pid) + "\n";
+			logMessage(queue_output.c_str());
 			tempQueue.pop();
 		}
 
@@ -450,24 +460,26 @@ void *handlePeerConnection(void *tArgs) {
 		sprintf(msg_cat_string_reply, "%d", 1);
 
 		string message_reply = lampclockstring_reply;
-		cout << message_reply << endl;
 		message_reply += ",";
-		cout << "pid string is" << pidstring_reply << endl;
 		message_reply += pidstring_reply;
-		cout << message_reply << endl;
 		message_reply += ",";
 		message_reply += msg_cat_string_reply;
-		cout << message_reply << endl;
-		cout << "Give reply index to broadcaster as "
-		     << reply_received_from_index << endl;
+
+		cout << "PID of replier is" << pidstring_reply << endl;
+		cout << "Replied message is " << message_reply << endl;
+
+		logMessage("PID of replier is\n");
+		logMessage(pidstring_reply);
+
+		logMessage("Replied message is \n");
+		logMessage(message_reply.c_str());
 
 		auto check = send(*client_fd, message_reply.c_str(),
 				  message_reply.length() + 1, 0);
-		cout << "Client FD of connection between "
-		     << reply_received_from_index << "and " << pidstring
-		     << "is " << client_fd << endl;
+
 		if (check != -1) {
 			cout << "Reply successfully executed" << endl;
+			logMessage("Reply succesfully executed\n");
 		}
 	} else if (msg_cat_no == 2) {
 		priority_queue<Message> temp;
@@ -490,11 +502,17 @@ void *handlePeerConnection(void *tArgs) {
 			messageQueue;  // Create a temporary queue to keep the
 				       // original queue intact
 		cout << "\nMessages in the queue after release/popping:\n";
+		logMessage("\nMessages in the queue after release/popping:\n");
+
 		while (!tempQueue.empty()) {
 			Message msg = tempQueue.top();
 			cout << "Content: " << msg.content
 			     << " Timestamp: " << msg.timestamp
 			     << " PID: " << msg.pid << endl;
+			string queue_output =
+				"Content: " + msg.content +
+				" Timestamp: " + to_string(msg.timestamp) +
+				" PID: " + to_string(msg.pid) + "\n";
 			tempQueue.pop();
 		}
 	}
@@ -529,6 +547,14 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 			cout << "[" << i
 			     << "]\t-\t Port : " << listOfPeers[i]->m_port
 			     << "\n\n";
+
+			logMessage("\n[%d]\t-\t Username : %s\n", i,
+				   listOfPeers[i]->m_name);
+			logMessage("[%d]\t-\t IP : %s\n", i,
+				   inet_ntoa(*(struct in_addr *)&listOfPeers[i]
+						      ->m_addr));
+			logMessage("[%d]\t-\t Port : %d\n\n", i,
+				   listOfPeers[i]->m_port);
 		}
 	}
 
@@ -577,6 +603,13 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 			     << listOfPeers[userSelection]->m_name << "\n";
 			cout << "Updated Lamport Clock of Sender is "
 			     << lamportClock << "\n";
+
+			logMessage("Send Event : %s is sending to %s\n ",
+				   usr_input,
+				   listOfPeers[userSelection]->m_name);
+			logMessage("Updated Lamport Clock of Sender is %d\n",
+				   lamportClock);
+
 			msg_conn_t sendToPeer;
 			sendToPeer.m_type = MSG_CONN;
 			strcpy(sendToPeer.m_name, usr_input);
@@ -603,6 +636,16 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 							   .m_addr)
 				     << ":" << peerSelection.m_port << "\n";
 
+				logMessage("\nYou choose: %s\n",
+					   peerSelection.m_name);
+				logMessage(
+					"The IP:port of Requested peers is : "
+					"%s:%d\n",
+					inet_ntoa(*(struct in_addr
+							    *)&peerSelection
+							   .m_addr),
+					peerSelection.m_port);
+
 				/*open socket, connect to other peer, get FD,
 				 * send msg_conn_t and wait for RESPONSE from
 				 * other PEER */
@@ -621,7 +664,7 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 				if (connect(equlsPeerFD,
 					    (struct sockaddr *)out_sock,
 					    sizeof(*out_sock)) < 0) {
-					perror("connect");
+					perror("Connection ERROR");
 					exit(1);
 				}
 
@@ -630,9 +673,13 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 				cout << "Sending to " << peerSelection.m_name
 				     << " Sending MSG_CONN and Waiting for "
 					"Response...\n\n";
-				cout << broadcaster_index << "is sending to "
-				     << userSelection << "on fd "
-				     << equlsPeerFD;
+
+				logMessage(
+					"%s is sending to %s:  Sending "
+					"MSG_CONN and "
+					"Waiting for Response...\n\n",
+					usr_input, peerSelection.m_name);
+
 				send(equlsPeerFD, message.c_str(),
 				     message.length() + 1, 0);
 
@@ -647,8 +694,13 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 						exit(1);
 					}
 					puts("Success :Reply received\n");
+					logMessage("Success :Reply received\n");
+
 					cout << "Reply received is: " << reply
 					     << "\n";
+
+					logMessage("Reply received  is %s\n",
+						   reply);
 
 					char lamportclockstring[10];
 					char pidstring[10];
@@ -668,20 +720,37 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 
 					cout << "Recevied permission from "
 					     << pidstring << endl;
+
+					logMessage(
+						"Received permission from %s",
+						pidstring);
+
 					perm_count++;
 					permission[atoi(pidstring)] = 1;
 					for (auto x : permission) {
 						cout << "Permission i is " << x
 						     << endl;
+
+						logMessage(
+							"Permission i is %d\n",
+							x);
 					}
 					if (perm_count != 2) {
 						cout << "Not yet receieved all "
 							"permissions"
 						     << endl;
+
+						logMessage(
+							"Not yet received all "
+							"permissions\n");
 					} else {
 						cout << "Received all "
 							"permissions\n"
 						     << endl;
+
+						logMessage(
+							"Received all "
+							"permissions\n");
 
 						requested_for_cs = 1;
 						priority_queue<Message> tempQueue =
@@ -715,6 +784,20 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 									"sectio"
 									"n !"
 								     << endl;
+
+								logMessage(
+									"Peer "
+									"%d is "
+									"allowe"
+									"d to "
+									"access"
+									" the "
+									"critic"
+									"al "
+									"sectio"
+									"n!\n",
+									broadcaster_index);
+
 								cout << "ENTERI"
 									"NG "
 									"THE "
@@ -723,6 +806,17 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 									"SECTIO"
 									"N!!!"
 								     << endl;
+
+								logMessage(
+									"ENTERI"
+									"NG "
+									"THE "
+									"CRITIC"
+									"AL "
+									"SECTIO"
+									"N!!!"
+									"\n");
+
 								sleep(5);
 								cout << "LEAVIN"
 									"G THE "
@@ -731,6 +825,19 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 									"SECTIO"
 									"N!!!"
 								     << endl;
+
+								logMessage(
+									"LEAVIN"
+									"G"
+									" THE "
+									"CRITIC"
+									"A"
+									"L "
+									"SECTIO"
+									"N"
+									"!!!"
+									"\n");
+
 								cout << "Peer "
 								     << broadcaster_index
 								     << " is "
@@ -741,6 +848,18 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 									"releas"
 									"e"
 								     << endl;
+
+								logMessage(
+									"Peer "
+									"%d is "
+									"about "
+									"to "
+									"broadc"
+									"ast a "
+									"releas"
+									"e\n",
+									broadcaster_index);
+
 								/*Release
 								 * Critical
 								 * Section now
@@ -793,11 +912,31 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 									"queue "
 									"rule !"
 								     << endl;
+
+								logMessage(
+									"Peer "
+									"%d is "
+									"denied"
+									" acces"
+									"s to "
+									"the "
+									"critic"
+									"al "
+									"sectio"
+									"n due "
+									"to "
+									"queue "
+									"rule "
+									"!",
+									broadcaster_index);
 							}
 						}
 					}
 				}
 				std::cout << "\nMessages in sender's queue:\n";
+
+				logMessage("\nMessages in sender's queue:\n");
+
 				priority_queue<Message> tempQueue =
 					messageQueue;
 				while (!tempQueue.empty()) {
@@ -807,6 +946,14 @@ void broadcast(struct sockaddr_in *out_sock, msg_ack_t *peerPort,
 						  << msg.timestamp
 						  << " PID: " << msg.pid
 						  << std::endl;
+
+					string queue_output =
+						"Content: " + msg.content +
+						" Timestamp: " +
+						to_string(msg.timestamp) +
+						" PID: " + to_string(msg.pid) +
+						"\n";
+					logMessage(queue_output.c_str());
 					tempQueue.pop();
 				}
 			}
